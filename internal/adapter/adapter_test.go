@@ -29,6 +29,7 @@ type fakeProposalClient struct {
 	createErr    error
 	created      []*agenticv1alpha1.Proposal
 	createCalls  int
+	wasCreated   *bool
 }
 
 func (f *fakeProposalClient) ListProposals(_ context.Context) ([]agenticv1alpha1.Proposal, error) {
@@ -39,6 +40,9 @@ func (f *fakeProposalClient) CreateProposal(_ context.Context, p *agenticv1alpha
 	f.createCalls++
 	if f.createErr != nil {
 		return false, f.createErr
+	}
+	if f.wasCreated != nil && !*f.wasCreated {
+		return false, nil
 	}
 	f.created = append(f.created, p)
 	return true, nil
@@ -94,6 +98,7 @@ func TestReconcile(t *testing.T) {
 		alertsErr       error
 		proposalsErr    error
 		createErr       error
+		wasCreated      *bool
 	}{
 		{
 			name:            "new alert creates proposal",
@@ -224,12 +229,32 @@ func TestReconcile(t *testing.T) {
 			},
 			wantCreated: 0,
 		},
+		{
+			name:            "already exists proposal not counted as created",
+			alerts:          models.GettableAlerts{makeAlert("HighCPU", "abcdef1234567890", oldEnough)},
+			wasCreated:      ptr(false),
+			wantCreated:     0,
+			wantCreateCalls: 1,
+		},
+		{
+			name: "nil fingerprint alert skipped with build error",
+			alerts: models.GettableAlerts{
+				{
+					StartsAt: func() *strfmt.DateTime { dt := strfmt.DateTime(oldEnough); return &dt }(),
+					Alert: models.Alert{
+						Labels: models.LabelSet{"alertname": "HighCPU"},
+					},
+				},
+			},
+			wantCreated:     0,
+			wantCreateCalls: 0,
+		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			as := &fakeAlertSource{alerts: tt.alerts, err: tt.alertsErr}
-			pc := &fakeProposalClient{proposals: tt.proposals, listErr: tt.proposalsErr, createErr: tt.createErr}
+			pc := &fakeProposalClient{proposals: tt.proposals, listErr: tt.proposalsErr, createErr: tt.createErr, wasCreated: tt.wasCreated}
 
 			a := &Adapter{
 				alerts:         as,
