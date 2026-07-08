@@ -1,4 +1,4 @@
-FROM registry.redhat.io/ubi9/go-toolset:9.8-1782852234 AS builder
+FROM registry.redhat.io/ubi9/go-toolset:9.8-1783442369 AS builder
 
 COPY go.mod go.sum* ./
 RUN go mod download
