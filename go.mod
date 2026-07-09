@@ -6,7 +6,7 @@ require (
 	github.com/go-openapi/runtime v0.32.4
 	github.com/go-openapi/strfmt v0.26.4
 	github.com/openshift/lightspeed-agentic-operator/api v0.0.1-dev.20260520
-	github.com/prometheus/alertmanager v0.32.1
+	github.com/prometheus/alertmanager v0.33.1
 	go.yaml.in/yaml/v3 v3.0.4
 	k8s.io/apimachinery v0.36.1
 	sigs.k8s.io/controller-runtime v0.24.1
@@ -68,7 +68,7 @@ require (
 	golang.org/x/sys v0.46.0 // indirect
 	golang.org/x/term v0.44.0 // indirect
 	golang.org/x/text v0.39.0 // indirect
-	golang.org/x/time v0.14.0 // indirect
+	golang.org/x/time v0.15.0 // indirect
 	gomodules.xyz/jsonpatch/v2 v2.4.0 // indirect
 	google.golang.org/protobuf v1.36.12-0.20260120151049-f2248ac996af // indirect
 	gopkg.in/evanphx/json-patch.v4 v4.13.0 // indirect
