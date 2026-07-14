@@ -1,5 +1,9 @@
 # Lightspeed Agentic Alerts Adapter
 
+## Specs
+
+No `.ai/spec/` directory yet. Specifications will be added when the codebase matures.
+
 A Go component that polls OpenShift AlertManager for firing alerts and creates `AgenticRun` CRs (`agentic.openshift.io/v1alpha1`) to trigger automated remediation via the Lightspeed Agentic operator. Stateless, single-replica, create-only design — no internal state, diffs AlertManager vs Kubernetes API each cycle.
 
 ## Commands
@@ -41,7 +45,25 @@ The AgenticRun CRD types come from `github.com/openshift/lightspeed-agentic-oper
 
 ## Conventions
 
-- Commit messages: [Conventional Commits](https://www.conventionalcommits.org/) (`feat:`, `fix:`, `test:`, `docs:`, `refactor:`).
 - Structured logging with `log/slog` (JSON handler), passed explicitly — no globals except `slog.SetDefault` in main.
 - Interfaces defined in the consumer package (`adapter`), not the provider.
 - Tests use table-driven style.
+
+## Git and PR Workflow
+
+### Commit Messages
+- Start with the Jira ticket reference: `OLS-XXXX description`
+- Keep the first line under 72 characters
+- Use imperative mood
+
+### Pull Requests
+This repo uses a **fork-based workflow**:
+
+1. **Push to your fork**, not to `origin` (openshift/lightspeed-agentic-alerts-adapter)
+2. **Create the PR** against `origin/main` using your fork's branch:
+   ```bash
+   git push <your-fork-remote> <branch>
+   gh pr create --repo openshift/lightspeed-agentic-alerts-adapter --head <your-github-user>:<branch> --base main
+   ```
+3. **PR title** must start with the Jira reference: `OLS-XXXX description`
+4. **Squash commits** before pushing
