@@ -23,33 +23,28 @@ data:
 
     # filtering: controls which alerts the adapter processes.
     filtering:
-      # allowedReceivers: only process alerts routed to these receivers (case-insensitive).
-      # No AgenticRuns are created until receivers are explicitly configured.
-      allowedReceivers:
-        - critical
+      # allowedReceivers: only process alerts that Alertmanager has routed to
+      # one of these receivers (as configured in Alertmanager's routing rules).
+      # In the OCP console, navigate to /settings/cluster/alertmanageryaml to
+      # view and edit Alertmanager routing rules and receivers.
+      #
+      # UNCOMMENT AND CONFIGURE at least one receiver to start automatic analysis.
+      #
+      # allowedReceivers:
+      #   - critical
 
     # deduplication: controls how the adapter identifies "the same problem" across
     # alert re-fires (e.g. pod restarts producing a new pod name).
-    # deduplication:
-    #   # ignoredLabels: labels stripped before computing the stable fingerprint.
-    #   # When set, fully replaces the defaults (no merging).
-    #   # When absent, defaults to: [pod, instance, endpoint, uid]
-    #   # Set to [] to include all labels in the fingerprint.
-    #   ignoredLabels:
-    #     - pod
-    #     - instance
-    #     - endpoint
-    #     - uid
-
-    # tools: shared skills for all workflow steps (maps to spec.tools on the AgenticRun).
-    # When configured, every AgenticRun created by the adapter includes these skills.
-    # Omit to create AgenticRuns with no tools.
-    # tools:
-    #   skills:
-    #     - image: registry.redhat.io/openshift-lightspeed/agentic-skills:latest
-    #       paths:
-    #         - /skills/prometheus
-    #         - /skills/cluster-diagnostics
+    deduplication:
+      # ignoredLabels: labels stripped before computing the stable fingerprint.
+      # When set, fully replaces the defaults (no merging).
+      # When absent, defaults to: [pod, instance, endpoint, uid]
+      # Set to [] to include all labels in the fingerprint.
+      ignoredLabels:
+        - pod
+        - instance
+        - endpoint
+        - uid
 
     # agent: override which agent handles AgenticRun workflow steps.
     # 'default' sets the agent for all steps; per-step keys override it.
@@ -60,23 +55,11 @@ data:
     #   execution: "execution-agent"
     #   verification: "verification-agent"
 
-    # Per-step tool overrides. When set, these replace the shared tools for that
-    # step on the AgenticRun (maps to spec.{analysis,execution,verification}.tools).
-    # analysis:
-    #   tools:
-    #     skills:
-    #       - image: registry.redhat.io/openshift-lightspeed/analysis-skills:latest
-    #         paths:
-    #           - /skills/diagnostic
-    # execution:
-    #   tools:
-    #     skills:
-    #       - image: registry.redhat.io/openshift-lightspeed/exec-skills:latest
-    #         paths:
-    #           - /skills/remediation
-    # verification:
-    #   tools:
-    #     skills:
-    #       - image: registry.redhat.io/openshift-lightspeed/verify-skills:latest
-    #         paths:
-    #           - /skills/validation
+    # tools: shared skills for all workflow steps (maps to spec.tools on the AgenticRun).
+    # When configured, every AgenticRun created by the adapter includes these skills.
+    # Omit to create AgenticRuns with no tools.
+    tools:
+      skills:
+        - image: quay.io/openshiftanalytics/agentic-skills:latest
+          paths:
+            - /skills/cluster-troubleshoot/investigate-alert

@@ -46,7 +46,7 @@ var (
 
 	//go:embed request.tmpl
 	requestTemplateStr string
-	requestTemplate    = template.Must(template.New("request").Parse(requestTemplateStr))
+	requestTemplate = template.Must(template.New("request").Parse(requestTemplateStr))
 )
 
 type requestData struct {
@@ -57,6 +57,7 @@ type requestData struct {
 	Summary     string
 	Description string
 	Labels      map[string]string
+	SkillPaths  []string
 }
 
 // Build constructs an AgenticRun from a single Alertmanager GettableAlert.
@@ -80,7 +81,7 @@ func Build(a *models.GettableAlert, tools config.ToolsConfig, agent config.Agent
 	}
 	startsAt := time.Time(*a.StartsAt)
 
-	request, err := buildRequest(a)
+	request, err := buildRequest(a, tools.Shared)
 	if err != nil {
 		return nil, err
 	}
@@ -196,7 +197,14 @@ func buildAnnotations(a *models.GettableAlert) map[string]string {
 }
 
 // buildRequest renders the embedded template with alert data for the analysis agent.
-func buildRequest(a *models.GettableAlert) (string, error) {
+func buildRequest(a *models.GettableAlert, sharedSkills []agenticv1alpha1.SkillsSource) (string, error) {
+	var skillPaths []string
+	for _, s := range sharedSkills {
+		for _, p := range s.Paths {
+			skillPaths = append(skillPaths, "/app"+p)
+		}
+	}
+
 	data := requestData{
 		AlertName:   a.Labels["alertname"],
 		Severity:    a.Labels["severity"],
@@ -205,6 +213,7 @@ func buildRequest(a *models.GettableAlert) (string, error) {
 		Summary:     a.Annotations["summary"],
 		Description: a.Annotations["description"],
 		Labels:      a.Labels,
+		SkillPaths:  skillPaths,
 	}
 
 	var buf bytes.Buffer
