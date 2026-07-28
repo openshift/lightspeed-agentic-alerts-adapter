@@ -46,7 +46,7 @@ coverage:
 	$(GO) tool cover -html=coverage.out -o coverage.html
 
 container-build:
-	podman build -t $(IMAGE_NAME):$(IMAGE_TAG) -f Containerfile .
+	podman build --no-cache -t $(IMAGE_NAME):$(IMAGE_TAG) -f Containerfile .
 
 container-push: container-build
 	podman push $(IMAGE_NAME):$(IMAGE_TAG)

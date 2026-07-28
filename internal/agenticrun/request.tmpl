@@ -1,11 +1,12 @@
 Alert: {{ .AlertName }} ({{ .Severity }})
 Namespace: {{ .Namespace }}
 Description: {{ .Description }}
-Labels:
-{{ range $k, $v := .Labels }}  {{ $k }}: {{ $v }}
-{{ end -}}
 {{- if .RunbookURL }}
 Runbook URL: {{ .RunbookURL }}
 {{- end }}
 
+{{- if .SkillPaths }}
+Investigate using the skill at{{ range .SkillPaths }} {{ . }}{{ end }}
+{{- else }}
 Investigate, follow causality chains to the root cause.
+{{- end }}
