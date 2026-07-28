@@ -7,4 +7,6 @@ Runbook URL: {{ .RunbookURL }}
 
 {{- if .SkillPaths }}
 Investigate using the skill at{{ range .SkillPaths }} {{ . }}{{ end }}
+{{- else }}
+Investigate, follow causality chains to the root cause.
 {{- end }}

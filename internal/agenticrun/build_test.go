@@ -297,7 +297,7 @@ func TestBuildRequestWithSkillPaths(t *testing.T) {
 			t.Fatalf("unexpected error: %v", err)
 		}
 		if strings.Contains(p.Spec.Request, "Investigate using the skill at") {
-			t.Error("request should not contain skill path when no shared skills set")
+			t.Error("request should not contain skill paths when no shared skills set")
 		}
 	})
 

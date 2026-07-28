@@ -1,15 +1,15 @@
 ## MODIFIED Requirements
 
 ### Requirement: Render a structured request from alert data
-The system SHALL render the `spec.request` field using an embedded Go template that includes the alert name, severity, namespace, description, and runbook URL. When shared skills are configured, the request SHALL include all skill paths prefixed with `/app` so the agent can locate mounted skills at runtime.
+The system SHALL render the `spec.request` field using an embedded Go template that includes the alert name, severity, namespace, description, runbook URL, and generic investigation guidance. When shared skills are configured, the request SHALL additionally include all skill paths prefixed with `/app` so the agent can locate mounted skills at runtime.
 
-#### Scenario: Alert with all annotation fields populated
-- **WHEN** the alert has summary and description annotations
-- **THEN** both are included in the rendered request
+#### Scenario: Alert with description annotation populated
+- **WHEN** the alert has a description annotation
+- **THEN** the description is included in the rendered request
 
-#### Scenario: Alert with missing annotations
-- **WHEN** the alert has no summary or description annotations
-- **THEN** the corresponding fields are empty in the rendered request and no error is returned
+#### Scenario: Alert with missing description annotation
+- **WHEN** the alert has no description annotation
+- **THEN** the description field is empty in the rendered request and no error is returned
 
 #### Scenario: Shared skills configured with one source and multiple paths
 - **WHEN** an AgenticRun is built with shared skills containing one source with paths `/skills/cluster-troubleshoot/investigate-alert` and `/skills/prometheus`
