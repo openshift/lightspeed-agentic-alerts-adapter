@@ -26,12 +26,13 @@ const (
 	runNamespace = "openshift-lightspeed"
 	defaultAgent = "default"
 
-	labelSource      = "agentic.openshift.io/source"
-	labelFingerprint = "agentic.openshift.io/alert-fingerprint"
-	labelAlertName   = "agentic.openshift.io/alert-name"
-	labelSeverity    = "agentic.openshift.io/alert-severity"
-	annotStartsAt    = "agentic.openshift.io/alert-starts-at"
-	annotSummary     = "agentic.openshift.io/alert-summary"
+	LabelSource           = "agentic.openshift.io/source"
+	LabelFingerprint      = "agentic.openshift.io/alert-fingerprint"
+	LabelDedupFingerprint = "agentic.openshift.io/alert-dedup-fingerprint"
+	LabelAlertName        = "agentic.openshift.io/alert-name"
+	LabelSeverity         = "agentic.openshift.io/alert-severity"
+	AnnotStartsAt         = "agentic.openshift.io/alert-starts-at"
+	AnnotSummary          = "agentic.openshift.io/alert-summary"
 
 	sourceValue = "alertmanager"
 
@@ -72,6 +73,7 @@ func Build(a *models.GettableAlert, tools config.ToolsConfig, agent config.Agent
 
 	alertName := a.Labels["alertname"]
 	namespace := a.Labels["namespace"]
+	originalFP := *a.Fingerprint
 	stableFP := StableFingerprint(a.Labels, ignoredLabels)
 	severity := a.Labels["severity"]
 
@@ -107,7 +109,7 @@ func Build(a *models.GettableAlert, tools config.ToolsConfig, agent config.Agent
 		ObjectMeta: metav1.ObjectMeta{
 			Name:        buildName(alertName, namespace, startsAt),
 			Namespace:   runNamespace,
-			Labels:      buildLabels(alertName, severity, stableFP),
+			Labels:      buildLabels(alertName, severity, originalFP, stableFP),
 			Annotations: buildAnnotations(a),
 		},
 		Spec: agenticv1alpha1.AgenticRunSpec{
@@ -168,12 +170,13 @@ func startsAtHash(t time.Time) string {
 }
 
 // buildLabels sets Kubernetes labels for alert traceability and filtering.
-func buildLabels(alertName, severity, stableFingerprint string) map[string]string {
+func buildLabels(alertName, severity, originalFingerprint, stableFingerprint string) map[string]string {
 	return map[string]string{
-		labelSource:      sourceValue,
-		labelFingerprint: stableFingerprint,
-		labelAlertName:   sanitizeLabelValue(strings.ToLower(alertName)),
-		labelSeverity:    sanitizeLabelValue(severity),
+		LabelSource:            sourceValue,
+		LabelFingerprint:       sanitizeLabelValue(originalFingerprint[:min(len(originalFingerprint), fingerprintLen)]),
+		LabelDedupFingerprint: stableFingerprint,
+		LabelAlertName:         sanitizeLabelValue(strings.ToLower(alertName)),
+		LabelSeverity:          sanitizeLabelValue(severity),
 	}
 }
 
@@ -182,14 +185,14 @@ func buildAnnotations(a *models.GettableAlert) map[string]string {
 	annots := map[string]string{}
 
 	if a.StartsAt != nil && !time.Time(*a.StartsAt).IsZero() {
-		annots[annotStartsAt] = time.Time(*a.StartsAt).UTC().Format(time.RFC3339)
+		annots[AnnotStartsAt] = time.Time(*a.StartsAt).UTC().Format(time.RFC3339)
 	}
 
 	if summary, ok := a.Annotations["summary"]; ok && summary != "" {
 		if len(summary) > maxSummaryLen {
 			summary = summary[:maxSummaryLen]
 		}
-		annots[annotSummary] = summary
+		annots[AnnotSummary] = summary
 	}
 
 	return annots

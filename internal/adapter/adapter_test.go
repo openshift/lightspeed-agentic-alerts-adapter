@@ -98,8 +98,8 @@ func makeRun(fingerprint string, conditions []metav1.Condition) agenticv1alpha1.
 			Name:      "test-" + fingerprint,
 			Namespace: "openshift-lightspeed",
 			Labels: map[string]string{
-				"agentic.openshift.io/alert-fingerprint": fingerprint,
-				"agentic.openshift.io/source":            "alertmanager",
+				agenticrun.LabelDedupFingerprint: fingerprint,
+				agenticrun.LabelSource:                          "alertmanager",
 			},
 		},
 		Status: agenticv1alpha1.AgenticRunStatus{

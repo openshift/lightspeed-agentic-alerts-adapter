@@ -57,14 +57,15 @@ func TestBuild(t *testing.T) {
 			expectedNamespace: runNamespace,
 			expectedTargetNS:  []string{"production"},
 			expectedLabels: map[string]string{
-				labelSource: sourceValue,
-				labelFingerprint: StableFingerprint(map[string]string{
+				LabelSource:      sourceValue,
+				LabelFingerprint: "abcdef12",
+				LabelDedupFingerprint: StableFingerprint(map[string]string{
 					"alertname": "KubePodCrashLooping",
 					"namespace": "production",
 					"severity":  "critical",
 				}, noIgnored),
-				labelAlertName: "kubepodcrashlooping",
-				labelSeverity:  "critical",
+				LabelAlertName: "kubepodcrashlooping",
+				LabelSeverity:  "critical",
 			},
 		},
 		{
@@ -79,31 +80,33 @@ func TestBuild(t *testing.T) {
 			expectedNamespace: runNamespace,
 			expectedTargetNS:  nil,
 			expectedLabels: map[string]string{
-				labelSource: sourceValue,
-				labelFingerprint: StableFingerprint(map[string]string{
+				LabelSource:      sourceValue,
+				LabelFingerprint: "ff00ff00",
+				LabelDedupFingerprint: StableFingerprint(map[string]string{
 					"alertname": "ClusterVersionAvailable",
 					"severity":  "info",
 				}, noIgnored),
-				labelAlertName: "clusterversionavailable",
-				labelSeverity:  "info",
+				LabelAlertName: "clusterversionavailable",
+				LabelSeverity:  "info",
 			},
 		},
 		{
-			name:              "ignored labels stripped from fingerprint",
+			name:              "ignored labels stripped from stable fingerprint",
 			alert:             makeAlert("TestAlert", "ns", "abc", "warning"),
 			ignoredLabels:     []string{"pod", "instance"},
 			expectedName:      "testalert-ns-895c8977",
 			expectedNamespace: runNamespace,
 			expectedTargetNS:  []string{"ns"},
 			expectedLabels: map[string]string{
-				labelSource: sourceValue,
-				labelFingerprint: StableFingerprint(map[string]string{
+				LabelSource:      sourceValue,
+				LabelFingerprint: "abc",
+				LabelDedupFingerprint: StableFingerprint(map[string]string{
 					"alertname": "TestAlert",
 					"namespace": "ns",
 					"severity":  "warning",
 				}, []string{"pod", "instance"}),
-				labelAlertName: "testalert",
-				labelSeverity:  "warning",
+				LabelAlertName: "testalert",
+				LabelSeverity:  "warning",
 			},
 		},
 	}
@@ -217,7 +220,7 @@ func TestBuildAnnotations(t *testing.T) {
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
-		got := p.Annotations[annotStartsAt]
+		got := p.Annotations[AnnotStartsAt]
 		expected := "2026-01-15T10:30:00Z"
 		if got != expected {
 			t.Errorf("starts-at = %q, want %q", got, expected)
@@ -230,7 +233,7 @@ func TestBuildAnnotations(t *testing.T) {
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
-		if got := p.Annotations[annotSummary]; got != "Pod is crash looping" {
+		if got := p.Annotations[AnnotSummary]; got != "Pod is crash looping" {
 			t.Errorf("summary = %q, want %q", got, "Pod is crash looping")
 		}
 	})
@@ -245,10 +248,10 @@ func TestBuildAnnotations(t *testing.T) {
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
-		if _, ok := p.Annotations[annotStartsAt]; ok {
+		if _, ok := p.Annotations[AnnotStartsAt]; ok {
 			t.Error("expected no starts-at annotation for zero time")
 		}
-		if _, ok := p.Annotations[annotSummary]; ok {
+		if _, ok := p.Annotations[AnnotSummary]; ok {
 			t.Error("expected no summary annotation when empty")
 		}
 	})
@@ -261,7 +264,7 @@ func TestBuildAnnotations(t *testing.T) {
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
-		if got := len(p.Annotations[annotSummary]); got != maxSummaryLen {
+		if got := len(p.Annotations[AnnotSummary]); got != maxSummaryLen {
 			t.Errorf("summary length = %d, want %d", got, maxSummaryLen)
 		}
 	})
