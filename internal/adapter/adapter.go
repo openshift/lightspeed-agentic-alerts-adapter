@@ -232,7 +232,7 @@ func tooEarly(alert *models.GettableAlert, now time.Time, threshold time.Duratio
 
 func hasActiveRun(stableFingerprint string, runs []agenticv1alpha1.AgenticRun) bool {
 	for i := range runs {
-		if runs[i].Labels["agentic.openshift.io/alert-fingerprint"] != stableFingerprint {
+		if runs[i].Labels[agenticrun.LabelDedupFingerprint] != stableFingerprint {
 			continue
 		}
 		phase := agenticv1alpha1.DerivePhase(runs[i].Status.Conditions)
@@ -245,7 +245,7 @@ func hasActiveRun(stableFingerprint string, runs []agenticv1alpha1.AgenticRun) b
 
 func tooRecent(stableFingerprint string, runs []agenticv1alpha1.AgenticRun, now time.Time, window time.Duration) bool {
 	for i := range runs {
-		if runs[i].Labels["agentic.openshift.io/alert-fingerprint"] != stableFingerprint {
+		if runs[i].Labels[agenticrun.LabelDedupFingerprint] != stableFingerprint {
 			continue
 		}
 		tt := terminalTime(&runs[i])

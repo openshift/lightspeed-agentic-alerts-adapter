@@ -101,7 +101,7 @@ func TestListAgenticRuns(t *testing.T) {
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "matching-abcdef12",
 			Namespace: runNamespace,
-			Labels:    map[string]string{labelSource: sourceValue},
+			Labels:    map[string]string{LabelSource: sourceValue},
 		},
 		Spec: agenticv1alpha1.AgenticRunSpec{
 			Request:  "matching",
@@ -112,7 +112,7 @@ func TestListAgenticRuns(t *testing.T) {
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "unrelated-12345678",
 			Namespace: runNamespace,
-			Labels:    map[string]string{labelSource: "other"},
+			Labels:    map[string]string{LabelSource: "other"},
 		},
 		Spec: agenticv1alpha1.AgenticRunSpec{
 			Request:  "unrelated",
