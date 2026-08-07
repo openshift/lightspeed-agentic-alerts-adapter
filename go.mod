@@ -7,7 +7,7 @@ require (
 	github.com/go-openapi/strfmt v0.27.0
 	github.com/openshift/lightspeed-agentic-operator/api v0.0.0-20260710093841-6e7c2bec3cc5
 	github.com/prometheus/alertmanager v0.33.1
-	go.yaml.in/yaml/v3 v3.0.4
+	go.yaml.in/yaml/v3 v3.0.5
 	k8s.io/apimachinery v0.36.2
 	sigs.k8s.io/controller-runtime v0.24.1
 )
