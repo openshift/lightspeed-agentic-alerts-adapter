@@ -13,7 +13,7 @@
 - [ ] 2.3 Script: read env vars (IMAGE, NAMESPACE, DEPLOYMENT_NAME) with defaults
 - [ ] 2.4 Script: copy manifests to temp directory
 - [ ] 2.5 Script: patch `deployment.yaml` with IMAGE using `yq`
-- [ ] 2.6 Script: patch `configmap.yaml` with test values (pollInterval: 10s, postRunDelay: 1m, allowedReceivers: [Default]) using `yq`
+- [ ] 2.6 Script: patch `configmap.yaml` with test values (pollInterval: 10s, postRunDelay: 1m, filtering.allowedReceivers: [Default]) using `yq`
 - [ ] 2.7 Script: apply manifests with `oc apply -f`
 - [ ] 2.8 Script: wait for deployment available with `oc wait --for=condition=available --timeout=300s`
 - [ ] 2.9 Script: verify operator is deployed and running (check `openshift-lightspeed` namespace for operator deployment)
@@ -26,7 +26,7 @@
 - [ ] 3.3 Test: query AlertManager for firing alerts (verify at least one exists routed to Default receiver)
 - [ ] 3.4 Test: wait for adapter to create AgenticRun (poll for AgenticRun with alert-fingerprint label matching a known alert)
 - [ ] 3.5 Test: verify AgenticRun has correct labels (alert-fingerprint, alert-dedup-fingerprint)
-- [ ] 3.6 Test: wait for operator to reconcile AgenticRun (status phase transitions from empty/Pending to another phase)
+- [ ] 3.6 Test: wait for operator to reconcile AgenticRun (status phase transitions to a successful state like Analyzing/Proposed/Executing/Completed, NOT Failed/Denied/Escalated)
 
 ## 4. Deduplication Tests
 
@@ -34,25 +34,24 @@
 - [ ] 4.2 Test: verify alert with severity `info` does not create AgenticRun (check AlertManager for info-severity alert, verify no AgenticRun created after 2+ poll cycles)
 - [ ] 4.3 Test: verify alert with severity `none` does not create AgenticRun
 - [ ] 4.4 Test: verify alert routed to non-allowed receiver does not create AgenticRun
-- [ ] 4.5 Test: create AgenticRun manually with phase `Analyzing`, verify adapter skips creating duplicate for same alert fingerprint
-- [ ] 4.6 Test: create AgenticRun manually with phase `Completed` and recent completion time, verify adapter skips creating duplicate (within postRunDelay)
-- [ ] 4.7 Test: create AgenticRun manually with phase `Failed` and old completion time, verify adapter creates new AgenticRun (outside postRunDelay)
+- [ ] 4.5 Test: create AgenticRun manually with phase `Analyzing`, labels `alert-dedup-fingerprint: X` and `source: alerts-adapter`, verify adapter skips creating duplicate for alert with same dedup fingerprint
+- [ ] 4.6 Test: create AgenticRun manually with phase `Completed`, labels `alert-dedup-fingerprint: X` and `source: alerts-adapter`, and recent completion time, verify adapter skips creating duplicate (within postRunDelay)
+- [ ] 4.7 Test: create AgenticRun manually with phase `Failed`, labels `alert-dedup-fingerprint: X` and `source: alerts-adapter`, and old completion time, verify adapter creates new AgenticRun (outside postRunDelay)
 
 ## 5. Fingerprint Tests
 
 - [ ] 5.1 Test: verify AgenticRun has both `alert-fingerprint` and `alert-dedup-fingerprint` labels
-- [ ] 5.2 Test: verify two alerts differing only in `pod` label produce same `alert-dedup-fingerprint` (check for alerts with same alertname/namespace but different pod, verify both create AgenticRuns with same dedup fingerprint OR second is skipped due to dedup)
+- [ ] 5.2 Test: verify two alerts differing only in `pod` label produce same `alert-dedup-fingerprint` (check for alerts with same alertname/namespace but different pod, verify first creates AgenticRun with fingerprint X, second is skipped due to matching fingerprint X)
 
 ## 6. Config Reload Tests
 
 - [ ] 6.1 Create `test/e2e/config_test.go`: Ginkgo test file
-- [ ] 6.2 Test: update ConfigMap `allowedReceivers` to a different receiver, wait for next poll cycle, verify adapter processes alerts from new receiver and skips old receiver (no pod restart)
+- [ ] 6.2 Test: update ConfigMap `filtering.allowedReceivers` to a different receiver, wait for next poll cycle, verify adapter processes alerts from new receiver and skips old receiver (no pod restart)
 - [ ] 6.3 Helper: get adapter pod start time before config change, verify same pod still running after (no restart)
 
 ## 7. Error Handling Tests
 
-- [ ] 7.1 Test: create AgenticRun manually with specific name, trigger alert that would create same name, verify adapter logs 409 and continues (check logs for "already exists" message)
-- [ ] 7.2 Test: verify adapter continues after poll cycle errors (may be hard to trigger in live cluster; document as manual test or skip for MVP)
+- [ ] 7.1 Test: create AgenticRun manually with specific name, trigger alert that would create same name, verify adapter logs 409 at Info level and continues (check logs for "already exists" message at Info level)
 
 ## 8. Make Targets
 

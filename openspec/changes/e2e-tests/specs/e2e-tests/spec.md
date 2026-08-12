@@ -20,7 +20,7 @@ The deploy script (`hack/deploy-e2e.sh`) SHALL patch manifests with test-specifi
 
 #### Scenario: ConfigMap is patched for fast testing
 - **WHEN** `hack/deploy-e2e.sh` runs
-- **THEN** the ConfigMap is patched with `pollInterval: 10s`, `postRunDelay: 1m`, and `allowedReceivers: [Default]` (uncommented)
+- **THEN** the ConfigMap is patched with `pollInterval: 10s`, `postRunDelay: 1m`, and `filtering.allowedReceivers: [Default]` (uncommented)
 
 #### Scenario: Deployment waits for readiness
 - **WHEN** `hack/deploy-e2e.sh` completes
@@ -37,7 +37,7 @@ The E2E test suite SHALL validate that a firing alert routed to a configured rec
 #### Scenario: AgenticRun is reconciled by live operator
 - **GIVEN** an AgenticRun CR was created by the adapter
 - **WHEN** the operator reconciles it
-- **THEN** the AgenticRun's status phase transitions from an initial state (e.g., empty or Pending) to a non-initial state (e.g., Analyzing, Proposed, etc.)
+- **THEN** the AgenticRun's status phase transitions to a successful state (e.g., Analyzing, Proposed, Executing, Verifying, Completed) and NOT to a failure state (Failed, Denied, Escalated)
 
 ### Requirement: Deduplication behavior
 The E2E test suite SHALL verify that alerts are correctly skipped based on adapter's deduplication filters (severity, receiver, pre-run delay, active AgenticRun, post-run delay).
@@ -53,13 +53,13 @@ The E2E test suite SHALL verify that alerts are correctly skipped based on adapt
 - **THEN** no AgenticRun is created for this alert
 
 #### Scenario: Alert routed to non-allowed receiver is skipped
-- **GIVEN** the adapter config has `allowedReceivers: [Default]` and an alert is routed to receiver `OtherReceiver`
+- **GIVEN** the adapter config has `filtering.allowedReceivers: [Default]` and an alert is routed to receiver `OtherReceiver`
 - **WHEN** the adapter polls AlertManager
 - **THEN** no AgenticRun is created for this alert
 
 #### Scenario: Alert with active AgenticRun is skipped
-- **GIVEN** an AgenticRun with phase `Analyzing` exists for alert fingerprint X
-- **WHEN** the adapter polls and finds a firing alert with fingerprint X routed to `Default`
+- **GIVEN** an AgenticRun with phase `Analyzing` and label `alert-dedup-fingerprint: X` and label `source: alerts-adapter` exists
+- **WHEN** the adapter polls and finds a firing alert with dedup fingerprint X routed to `Default`
 - **THEN** no additional AgenticRun is created
 
 #### Scenario: Alert within postRunDelay is skipped
@@ -81,16 +81,16 @@ The E2E test suite SHALL verify that created AgenticRun CRs have both `alert-fin
 - **THEN** the AgenticRun has label `alert-fingerprint: abc123` and label `alert-dedup-fingerprint: <computed-hash>` (non-empty)
 
 #### Scenario: Dedup fingerprint ignores configured labels
-- **GIVEN** the adapter config has `ignoredLabels: [pod, instance, endpoint, uid]` and two alerts differ only in `pod` label
-- **WHEN** the adapter processes the second alert
-- **THEN** both alerts produce the same `alert-dedup-fingerprint` value (deduplication works)
+- **GIVEN** the adapter config has `deduplication.ignoredLabels: [pod, instance, endpoint, uid]` and two alerts differ only in `pod` label
+- **WHEN** the adapter processes both alerts
+- **THEN** the first alert creates an AgenticRun with `alert-dedup-fingerprint: X`, and the second alert is skipped (because it would produce the same fingerprint X, proving deduplication works)
 
 ### Requirement: ConfigMap reload without restart
 The E2E test suite SHALL verify that changing the ConfigMap causes the adapter to reload configuration on the next poll cycle without requiring a pod restart.
 
 #### Scenario: Config change is picked up without restart
-- **GIVEN** the adapter is running with `allowedReceivers: [Default]`
-- **WHEN** the ConfigMap is updated to `allowedReceivers: [Critical]` (and AlertManager has alerts routed to both receivers)
+- **GIVEN** the adapter is running with `filtering.allowedReceivers: [Default]`
+- **WHEN** the ConfigMap is updated to `filtering.allowedReceivers: [Critical]` (and AlertManager has alerts routed to both receivers)
 - **AND** at least one poll interval (10s) + propagation time elapses
 - **THEN** the adapter skips alerts routed to `Default` and processes alerts routed to `Critical` (no pod restart occurred)
 
@@ -100,12 +100,7 @@ The E2E test suite SHALL verify that the adapter handles expected errors gracefu
 #### Scenario: 409 AlreadyExists on create is no-op
 - **GIVEN** an AgenticRun with name X already exists in the cluster
 - **WHEN** the adapter attempts to create an AgenticRun with the same name X (race condition or poll retry)
-- **THEN** the create call returns 409, the adapter logs it at debug level, and the reconcile cycle completes successfully (no error reported)
-
-#### Scenario: Adapter continues after transient AlertManager error
-- **GIVEN** AlertManager returns a 500 error on one poll
-- **WHEN** the adapter polls AlertManager
-- **THEN** the adapter logs the error and continues (next poll succeeds)
+- **THEN** the create call returns 409, the adapter logs it at Info level, and the reconcile cycle completes successfully (no error reported)
 
 ### Requirement: Make targets for E2E workflow
 The project SHALL provide make targets for E2E test workflow: `deploy-e2e`, `test-e2e`, `undeploy-e2e`.

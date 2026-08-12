@@ -68,7 +68,7 @@ E2E tests on a real OpenShift cluster with live AlertManager and operator are ne
 3. Patch `configmap.yaml` with test-friendly values:
    - `pollInterval: 10s` (faster than default 30s)
    - `postRunDelay: 1m` (shorter than default 1h for testing cooldown logic)
-   - `allowedReceivers: [Default]` (uncommented — required for adapter to process alerts)
+   - `filtering.allowedReceivers: [Default]` (uncommented — required for adapter to process alerts)
 4. Deploy with `oc apply -f`
 5. Wait for deployment to be available
 
@@ -82,11 +82,11 @@ E2E tests on a real OpenShift cluster with live AlertManager and operator are ne
 ### 4. Test scope: happy path + dedup + config reload + errors
 
 **Decision:** E2E tests will cover:
-1. **Happy path:** Firing alert (routed to configured receiver) → AgenticRun created with correct labels → operator reconciles it (phase transition observed)
+1. **Happy path:** Firing alert (routed to configured receiver) → AgenticRun created with correct labels → operator reconciles it successfully (status phase reaches a successful state, not Failed/Denied/Escalated)
 2. **Deduplication:** Alerts skipped due to severity `info`/`none`, receiver not in allowlist, active AgenticRun, within `postRunDelay` of terminal AgenticRun
 3. **Fingerprint labels:** Verify `alert-fingerprint` and `alert-dedup-fingerprint` are set correctly
-4. **Config reload:** Update ConfigMap (e.g., change `allowedReceivers`), verify adapter picks it up on next poll without restart
-5. **Error handling:** 409 AlreadyExists on AgenticRun create is no-op, adapter continues on AlertManager transient errors
+4. **Config reload:** Update ConfigMap (e.g., change `filtering.allowedReceivers`), verify adapter picks it up on next poll without restart
+5. **Error handling:** 409 AlreadyExists on AgenticRun create is no-op (logged at Info level)
 
 **Rationale:** These scenarios cover the critical integration points and most common failure modes.
 
