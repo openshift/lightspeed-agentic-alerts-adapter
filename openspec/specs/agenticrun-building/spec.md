@@ -41,7 +41,7 @@ The system SHALL sanitize alert values to conform to Kubernetes naming and label
 - **THEN** those characters are replaced with hyphens and leading/trailing non-alphanumeric characters are trimmed
 
 ### Requirement: Render a structured request from alert data
-The system SHALL render the `spec.request` field using an embedded Go template that includes the alert name, severity, namespace, summary, description, and all labels.
+The system SHALL render the `spec.request` field using an embedded Go template that includes the alert name, severity, namespace, description, and runbook URL. All alert-sourced values SHALL be sanitized before template rendering by stripping Unicode control characters (except newline), Unicode format characters, and backtick runs of 3 or more. Only allow-listed fields SHALL be passed to the template; the full Labels map SHALL NOT be included in the template data.
 
 #### Scenario: Alert with all annotation fields populated
 - **WHEN** the alert has summary and description annotations
@@ -50,6 +50,22 @@ The system SHALL render the `spec.request` field using an embedded Go template t
 #### Scenario: Alert with missing annotations
 - **WHEN** the alert has no summary or description annotations
 - **THEN** the corresponding fields are empty in the rendered request and no error is returned
+
+#### Scenario: Control characters in alert data are stripped
+- **WHEN** an alert label or annotation contains Unicode control characters (e.g., null bytes, escape sequences)
+- **THEN** the control characters are removed from the rendered request, except for newlines which are preserved
+
+#### Scenario: Unicode format characters in alert data are stripped
+- **WHEN** an alert annotation contains Unicode format characters (e.g., zero-width spaces, bidi overrides)
+- **THEN** the format characters are removed from the rendered request
+
+#### Scenario: Backtick runs in alert data are stripped
+- **WHEN** an alert annotation contains a sequence of 3 or more consecutive backtick characters
+- **THEN** the backtick sequence is removed from the rendered request, while single and double backticks are preserved
+
+#### Scenario: Extra labels are not exposed in the request
+- **WHEN** an alert has labels beyond the allow-listed fields (alertname, severity, namespace)
+- **THEN** those extra labels do not appear in the rendered request
 
 ### Requirement: Configure all three workflow steps with tools
 The system SHALL set the analysis, execution, and verification steps on the AgenticRun, each referencing the `default` agent. The system SHALL support shared tools and per-step tool overrides.
