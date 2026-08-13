@@ -14,6 +14,7 @@ import (
 	"strings"
 	"text/template"
 	"time"
+	"unicode"
 
 	agenticv1alpha1 "github.com/openshift/lightspeed-agentic-operator/api/v1alpha1"
 	"github.com/prometheus/alertmanager/api/v2/models"
@@ -44,6 +45,7 @@ const (
 var (
 	invalidLabelChars = regexp.MustCompile(`[^a-zA-Z0-9._-]`)
 	invalidDNSChars   = regexp.MustCompile(`[^a-z0-9-]`)
+	backtickRun       = regexp.MustCompile("`{3,}")
 
 	//go:embed request.tmpl
 	requestTemplateStr string
@@ -57,7 +59,6 @@ type requestData struct {
 	Namespace   string
 	Summary     string
 	Description string
-	Labels      map[string]string
 	SkillPaths  []string
 }
 
@@ -209,13 +210,12 @@ func buildRequest(a *models.GettableAlert, sharedSkills []agenticv1alpha1.Skills
 	}
 
 	data := requestData{
-		AlertName:   a.Labels["alertname"],
-		Severity:    a.Labels["severity"],
-		RunbookURL:  a.Annotations["runbook_url"],
-		Namespace:   a.Labels["namespace"],
-		Summary:     a.Annotations["summary"],
-		Description: a.Annotations["description"],
-		Labels:      a.Labels,
+		AlertName:   sanitizePromptValue(a.Labels["alertname"]),
+		Severity:    sanitizePromptValue(a.Labels["severity"]),
+		RunbookURL:  sanitizePromptValue(a.Annotations["runbook_url"]),
+		Namespace:   sanitizePromptValue(a.Labels["namespace"]),
+		Summary:     sanitizePromptValue(a.Annotations["summary"]),
+		Description: sanitizePromptValue(a.Annotations["description"]),
 		SkillPaths:  skillPaths,
 	}
 
@@ -243,6 +243,21 @@ func sanitizeLabelValue(s string) string {
 	s = strings.TrimRight(s, "-_.")
 
 	return s
+}
+
+// sanitizePromptValue strips control characters (except newline), Unicode format
+// characters (zero-width spaces, bidi overrides), and backtick runs of 3+ from s.
+func sanitizePromptValue(s string) string {
+	s = strings.Map(func(r rune) rune {
+		if r == '\n' {
+			return r
+		}
+		if unicode.IsControl(r) || unicode.In(r, unicode.Cf) {
+			return -1
+		}
+		return r
+	}, s)
+	return backtickRun.ReplaceAllString(s, "")
 }
 
 func resolveAgent(perStep, global string) string {
