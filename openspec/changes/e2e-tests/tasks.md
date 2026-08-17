@@ -26,7 +26,7 @@
 - [ ] 3.3 Test: query AlertManager for firing alerts (verify at least one exists routed to Default receiver)
 - [ ] 3.4 Test: wait for adapter to create AgenticRun (poll for AgenticRun with alert-fingerprint label matching a known alert)
 - [ ] 3.5 Test: verify AgenticRun has correct labels (alert-fingerprint, alert-dedup-fingerprint)
-- [ ] 3.6 Test: wait for operator to reconcile AgenticRun (status phase transitions to a successful state like Analyzing/Proposed/Executing/Completed, NOT Failed/Denied/Escalated)
+
 
 ## 4. Deduplication Tests
 
@@ -43,35 +43,29 @@
 - [ ] 5.1 Test: verify AgenticRun has both `alert-fingerprint` and `alert-dedup-fingerprint` labels
 - [ ] 5.2 Test: verify two alerts differing only in `pod` label produce same `alert-dedup-fingerprint` (check for alerts with same alertname/namespace but different pod, verify first creates AgenticRun with fingerprint X, second is skipped due to matching fingerprint X)
 
-## 6. Config Reload Tests
+## 6. Error Handling Tests
 
-- [ ] 6.1 Create `test/e2e/config_test.go`: Ginkgo test file
-- [ ] 6.2 Test: update ConfigMap `filtering.allowedReceivers` to a different receiver, wait for next poll cycle, verify adapter processes alerts from new receiver and skips old receiver (no pod restart)
-- [ ] 6.3 Helper: get adapter pod start time before config change, verify same pod still running after (no restart)
+- [ ] 6.1 Test: create AgenticRun manually with specific name, trigger alert that would create same name, verify adapter logs 409 at Info level and continues (check logs for "already exists" message at Info level)
 
-## 7. Error Handling Tests
+## 7. Make Targets
 
-- [ ] 7.1 Test: create AgenticRun manually with specific name, trigger alert that would create same name, verify adapter logs 409 at Info level and continues (check logs for "already exists" message at Info level)
+- [ ] 7.1 Add `make deploy-e2e` target: runs `hack/deploy-e2e.sh`, sets IMAGE from env or default
+- [ ] 7.2 Add `make test-e2e` target: installs Ginkgo if needed, runs `ginkgo -v ./test/e2e/...`
+- [ ] 7.3 Add `make undeploy-e2e` target: runs `oc delete -f manifests/ --ignore-not-found -n <namespace>`
+- [ ] 7.4 Update `make test` to exclude E2E tests: `go test $$(go list ./... | grep -v /test/e2e)`
 
-## 8. Make Targets
+## 8. Documentation
 
-- [ ] 8.1 Add `make deploy-e2e` target: runs `hack/deploy-e2e.sh`, sets IMAGE from env or default
-- [ ] 8.2 Add `make test-e2e` target: installs Ginkgo if needed, runs `ginkgo -v ./test/e2e/...`
-- [ ] 8.3 Add `make undeploy-e2e` target: runs `oc delete -f manifests/ --ignore-not-found -n <namespace>`
-- [ ] 8.4 Update `make test` to exclude E2E tests: `go test $$(go list ./... | grep -v /test/e2e)`
+- [ ] 8.1 Create `test/e2e/README.md`: how to run E2E tests locally (oc login, make deploy-e2e, make test-e2e)
+- [ ] 8.2 Document prerequisites: oc CLI, yq, cluster access, lightspeed-agentic-operator deployed
+- [ ] 8.3 Document env vars: IMAGE, NAMESPACE, DEPLOYMENT_NAME
+- [ ] 8.4 Update main README or CONTRIBUTING.md with link to E2E test docs
 
-## 9. Documentation
+## 9. CI Integration (separate PR to openshift/release)
 
-- [ ] 9.1 Create `test/e2e/README.md`: how to run E2E tests locally (oc login, make deploy-e2e, make test-e2e)
-- [ ] 9.2 Document prerequisites: oc CLI, yq, cluster access, lightspeed-agentic-operator deployed
-- [ ] 9.3 Document env vars: IMAGE, NAMESPACE, DEPLOYMENT_NAME
-- [ ] 9.4 Update main README or CONTRIBUTING.md with link to E2E test docs
-
-## 10. CI Integration (separate PR to openshift/release)
-
-- [ ] 10.1 Create step-registry definition: `ci-operator/step-registry/lightspeed-agentic-alerts-adapter/e2e/`
-- [ ] 10.2 Add `lightspeed-agentic-alerts-adapter-e2e-commands.sh`: install dependencies (yq), deploy operator, run `make deploy-e2e`, run `make test-e2e`
-- [ ] 10.3 Add `lightspeed-agentic-alerts-adapter-e2e-ref.yaml`: step definition (timeout, resources, from: src)
-- [ ] 10.4 Add artifact collection (pod logs, events, deployment yaml) on failure
-- [ ] 10.5 Configure job as presubmit, optional initially
-- [ ] 10.6 Add Slack reporting to team channel (if applicable)
+- [ ] 9.1 Create step-registry definition: `ci-operator/step-registry/lightspeed-agentic-alerts-adapter/e2e/`
+- [ ] 9.2 Add `lightspeed-agentic-alerts-adapter-e2e-commands.sh`: install dependencies (yq), deploy operator, run `make deploy-e2e`, run `make test-e2e`
+- [ ] 9.3 Add `lightspeed-agentic-alerts-adapter-e2e-ref.yaml`: step definition (timeout, resources, from: src)
+- [ ] 9.4 Add artifact collection (pod logs, events, deployment yaml) on failure
+- [ ] 9.5 Configure job as presubmit, optional initially
+- [ ] 9.6 Add Slack reporting to team channel (if applicable)

@@ -82,11 +82,10 @@ E2E tests on a real OpenShift cluster with live AlertManager and operator are ne
 ### 4. Test scope: happy path + dedup + config reload + errors
 
 **Decision:** E2E tests will cover:
-1. **Happy path:** Firing alert (routed to configured receiver) → AgenticRun created with correct labels → operator reconciles it successfully (status phase reaches a successful state, not Failed/Denied/Escalated)
+1. **Happy path:** Firing alert (routed to configured receiver) → AgenticRun created with correct labels
 2. **Deduplication:** Alerts skipped due to severity `info`/`none`, receiver not in allowlist, active AgenticRun, within `postRunDelay` of terminal AgenticRun
 3. **Fingerprint labels:** Verify `alert-fingerprint` and `alert-dedup-fingerprint` are set correctly
-4. **Config reload:** Update ConfigMap (e.g., change `filtering.allowedReceivers`), verify adapter picks it up on next poll without restart
-5. **Error handling:** 409 AlreadyExists on AgenticRun create is no-op (logged at Info level)
+4. **Error handling:** 409 AlreadyExists on AgenticRun create is no-op (logged at Info level)
 
 **Rationale:** These scenarios cover the critical integration points and most common failure modes.
 

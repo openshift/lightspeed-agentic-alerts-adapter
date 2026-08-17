@@ -34,11 +34,6 @@ The E2E test suite SHALL validate that a firing alert routed to a configured rec
 - **WHEN** the adapter polls AlertManager
 - **THEN** an AgenticRun CR is created in the `openshift-lightspeed` namespace with labels `alert-fingerprint` and `alert-dedup-fingerprint`
 
-#### Scenario: AgenticRun is reconciled by live operator
-- **GIVEN** an AgenticRun CR was created by the adapter
-- **WHEN** the operator reconciles it
-- **THEN** the AgenticRun's status phase transitions to a successful state (e.g., Analyzing, Proposed, Executing, Verifying, Completed) and NOT to a failure state (Failed, Denied, Escalated)
-
 ### Requirement: Deduplication behavior
 The E2E test suite SHALL verify that alerts are correctly skipped based on adapter's deduplication filters (severity, receiver, pre-run delay, active AgenticRun, post-run delay).
 
@@ -84,15 +79,6 @@ The E2E test suite SHALL verify that created AgenticRun CRs have both `alert-fin
 - **GIVEN** the adapter config has `deduplication.ignoredLabels: [pod, instance, endpoint, uid]` and two alerts differ only in `pod` label
 - **WHEN** the adapter processes both alerts
 - **THEN** the first alert creates an AgenticRun with `alert-dedup-fingerprint: X`, and the second alert is skipped (because it would produce the same fingerprint X, proving deduplication works)
-
-### Requirement: ConfigMap reload without restart
-The E2E test suite SHALL verify that changing the ConfigMap causes the adapter to reload configuration on the next poll cycle without requiring a pod restart.
-
-#### Scenario: Config change is picked up without restart
-- **GIVEN** the adapter is running with `filtering.allowedReceivers: [Default]`
-- **WHEN** the ConfigMap is updated to `filtering.allowedReceivers: [Critical]` (and AlertManager has alerts routed to both receivers)
-- **AND** at least one poll interval (10s) + propagation time elapses
-- **THEN** the adapter skips alerts routed to `Default` and processes alerts routed to `Critical` (no pod restart occurred)
 
 ### Requirement: Error handling
 The E2E test suite SHALL verify that the adapter handles expected errors gracefully (409 AlreadyExists, transient failures).
