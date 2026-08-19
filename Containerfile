@@ -27,3 +27,5 @@ COPY --from=builder /opt/app-root/src/alerts-adapter /usr/local/bin/alerts-adapt
 USER 1001
 
 ENTRYPOINT ["alerts-adapter"]
+
+# trigger a build
