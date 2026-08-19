@@ -21,7 +21,7 @@ func newTestClient(t *testing.T) *Client {
 
 	fc := fake.NewClientBuilder().WithScheme(scheme).Build()
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
-	return &Client{Client: fc, logger: logger}
+	return &Client{Client: fc, namespace: RunNamespace, logger: logger}
 }
 
 func TestCreateAgenticRun(t *testing.T) {
@@ -30,7 +30,7 @@ func TestCreateAgenticRun(t *testing.T) {
 	p := &agenticv1alpha1.AgenticRun{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "test-run-abcdef12",
-			Namespace: runNamespace,
+			Namespace: RunNamespace,
 		},
 		Spec: agenticv1alpha1.AgenticRunSpec{
 			Request:  "test request",
@@ -63,7 +63,7 @@ func TestCreateAgenticRunAlreadyExists(t *testing.T) {
 	p := &agenticv1alpha1.AgenticRun{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "test-run-abcdef12",
-			Namespace: runNamespace,
+			Namespace: RunNamespace,
 		},
 		Spec: agenticv1alpha1.AgenticRunSpec{
 			Request:  "test request",
@@ -78,7 +78,7 @@ func TestCreateAgenticRunAlreadyExists(t *testing.T) {
 	duplicate := &agenticv1alpha1.AgenticRun{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "test-run-abcdef12",
-			Namespace: runNamespace,
+			Namespace: RunNamespace,
 		},
 		Spec: agenticv1alpha1.AgenticRunSpec{
 			Request:  "test request",
@@ -100,7 +100,7 @@ func TestListAgenticRuns(t *testing.T) {
 	matching := &agenticv1alpha1.AgenticRun{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "matching-abcdef12",
-			Namespace: runNamespace,
+			Namespace: RunNamespace,
 			Labels:    map[string]string{LabelSource: sourceValue},
 		},
 		Spec: agenticv1alpha1.AgenticRunSpec{
@@ -111,7 +111,7 @@ func TestListAgenticRuns(t *testing.T) {
 	unrelated := &agenticv1alpha1.AgenticRun{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "unrelated-12345678",
-			Namespace: runNamespace,
+			Namespace: RunNamespace,
 			Labels:    map[string]string{LabelSource: "other"},
 		},
 		Spec: agenticv1alpha1.AgenticRunSpec{

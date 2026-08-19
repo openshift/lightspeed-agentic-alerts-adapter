@@ -6,7 +6,7 @@
 ## 2. RBAC
 
 - [x] 2.1 Create `manifests/rolebinding-alertmanager.yaml` with the RoleBinding in `openshift-monitoring` granting `monitoring-alertmanager-view` to the adapter's ServiceAccount
-- [x] 2.2 Create `manifests/clusterrole-agenticruns.yaml` with the ClusterRole and ClusterRoleBinding (separated by `---`) granting create/list/get on `agenticruns` in `agentic.openshift.io` and binding it to the adapter's ServiceAccount
+- [x] 2.2 Create `manifests/rbac.yaml` with the Role and RoleBinding in `openshift-lightspeed` (separated by `---`) granting create/list/get on `agenticruns` in `agentic.openshift.io` and binding it to the adapter's ServiceAccount
 
 ## 3. Deployment
 

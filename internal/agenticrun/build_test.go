@@ -54,7 +54,7 @@ func TestBuild(t *testing.T) {
 			alert:             makeAlert("KubePodCrashLooping", "production", "abcdef1234567890", "critical"),
 			ignoredLabels:     noIgnored,
 			expectedName:      "kubepodcrashlooping-production-895c8977",
-			expectedNamespace: runNamespace,
+			expectedNamespace: RunNamespace,
 			expectedTargetNS:  []string{"production"},
 			expectedLabels: map[string]string{
 				LabelSource:      sourceValue,
@@ -77,7 +77,7 @@ func TestBuild(t *testing.T) {
 			}(),
 			ignoredLabels:     noIgnored,
 			expectedName:      "clusterversionavailable-895c8977",
-			expectedNamespace: runNamespace,
+			expectedNamespace: RunNamespace,
 			expectedTargetNS:  nil,
 			expectedLabels: map[string]string{
 				LabelSource:      sourceValue,
@@ -95,7 +95,7 @@ func TestBuild(t *testing.T) {
 			alert:             makeAlert("TestAlert", "ns", "abc", "warning"),
 			ignoredLabels:     []string{"pod", "instance"},
 			expectedName:      "testalert-ns-895c8977",
-			expectedNamespace: runNamespace,
+			expectedNamespace: RunNamespace,
 			expectedTargetNS:  []string{"ns"},
 			expectedLabels: map[string]string{
 				LabelSource:      sourceValue,

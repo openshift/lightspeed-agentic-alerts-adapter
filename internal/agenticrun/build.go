@@ -24,7 +24,7 @@ import (
 )
 
 const (
-	runNamespace = "openshift-lightspeed"
+	RunNamespace = "openshift-lightspeed"
 	defaultAgent = "default"
 
 	LabelSource           = "agentic.openshift.io/source"
@@ -110,7 +110,7 @@ func Build(a *models.GettableAlert, tools config.ToolsConfig, agent config.Agent
 		},
 		ObjectMeta: metav1.ObjectMeta{
 			Name:        buildName(alertName, namespace, startsAt),
-			Namespace:   runNamespace,
+			Namespace:   RunNamespace,
 			Labels:      buildLabels(alertName, severity, originalFP, stableFP),
 			Annotations: buildAnnotations(a),
 		},

@@ -44,12 +44,12 @@ The manifests SHALL include a RoleBinding in the `openshift-monitoring` namespac
 - **THEN** a RoleBinding named `lightspeed-agentic-alerts-adapter-alertmanager` SHALL exist in `openshift-monitoring` binding the `monitoring-alertmanager-view` Role to the adapter's ServiceAccount
 
 ### Requirement: AgenticRun RBAC
-The manifests SHALL include a ClusterRole and ClusterRoleBinding in a single file that grant the adapter's ServiceAccount permissions to `create`, `list`, and `get` resources of type `agenticruns` in the `agentic.openshift.io` API group across all namespaces.
+The manifests SHALL include a Role and RoleBinding in the `openshift-lightspeed` namespace in a single file that grant the adapter's ServiceAccount permissions to `create`, `list`, and `get` resources of type `agenticruns` in the `agentic.openshift.io` API group.
 
-#### Scenario: AgenticRun ClusterRole
+#### Scenario: AgenticRun Role
 - **WHEN** the manifests are applied
-- **THEN** a ClusterRole named `lightspeed-agentic-alerts-adapter-agenticruns` SHALL exist with `create`, `list`, `get` verbs on `agenticruns` in the `agentic.openshift.io` API group
+- **THEN** a Role named `lightspeed-agentic-alerts-adapter-agenticruns` SHALL exist in the `openshift-lightspeed` namespace with `create`, `list`, `get` verbs on `agenticruns` in the `agentic.openshift.io` API group
 
-#### Scenario: AgenticRun ClusterRoleBinding
+#### Scenario: AgenticRun RoleBinding
 - **WHEN** the manifests are applied
-- **THEN** a ClusterRoleBinding SHALL bind the ClusterRole to the adapter's ServiceAccount in `openshift-lightspeed`
+- **THEN** a RoleBinding in the `openshift-lightspeed` namespace SHALL bind the Role to the adapter's ServiceAccount
