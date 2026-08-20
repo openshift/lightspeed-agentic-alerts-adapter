@@ -124,6 +124,7 @@ data:
 
 - [ARCHITECTURE.md](ARCHITECTURE.md) — design rationale, requirements, deployment model, and future work
 - [docs/receivers.md](docs/receivers.md) — what AlertManager receivers are and how the adapter uses them for filtering
+- [test/e2e/README.md](test/e2e/README.md) — how to run E2E tests locally and in CI
 - [openspec/specs/](openspec/specs/) — detailed specs for each subsystem, managed with the [OpenSpec](https://github.com/Fission-AI/OpenSpec) framework
 
 ## License
