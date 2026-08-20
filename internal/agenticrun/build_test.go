@@ -113,7 +113,7 @@ func TestBuild(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			p, err := Build(tt.alert, config.ToolsConfig{}, config.AgentConfig{}, tt.ignoredLabels)
+			p, err := Build(tt.alert, config.ToolsConfig{}, config.AgentConfig{}, tt.ignoredLabels, RunNamespace)
 			if err != nil {
 				t.Fatalf("unexpected error: %v", err)
 			}
@@ -152,7 +152,7 @@ func TestBuildNilFingerprint(t *testing.T) {
 	a := makeAlert("TestAlert", "ns", "abcdef12", "warning")
 	a.Fingerprint = nil
 
-	_, err := Build(a, config.ToolsConfig{}, config.AgentConfig{}, nil)
+	_, err := Build(a, config.ToolsConfig{}, config.AgentConfig{}, nil, RunNamespace)
 	if err == nil {
 		t.Fatal("expected error for nil fingerprint, got nil")
 	}
@@ -167,7 +167,7 @@ func TestBuildNilStartsAt(t *testing.T) {
 	a := makeAlert("TestAlert", "ns", "abcdef12", "warning")
 	a.StartsAt = nil
 
-	_, err := Build(a, config.ToolsConfig{}, config.AgentConfig{}, nil)
+	_, err := Build(a, config.ToolsConfig{}, config.AgentConfig{}, nil, RunNamespace)
 	if err == nil {
 		t.Fatal("expected error for nil startsAt, got nil")
 	}
@@ -180,7 +180,7 @@ func TestBuildNilStartsAt(t *testing.T) {
 
 func TestBuildWorkflowSteps(t *testing.T) {
 	a := makeAlert("TestAlert", "ns", "abcdef12", "warning")
-	p, err := Build(a, config.ToolsConfig{}, config.AgentConfig{}, nil)
+	p, err := Build(a, config.ToolsConfig{}, config.AgentConfig{}, nil, RunNamespace)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -199,11 +199,11 @@ func TestBuildWorkflowSteps(t *testing.T) {
 func TestBuildDeterministicNaming(t *testing.T) {
 	a := makeAlert("KubePodCrashLooping", "production", "abcdef1234567890", "critical")
 
-	p1, err := Build(a, config.ToolsConfig{}, config.AgentConfig{}, nil)
+	p1, err := Build(a, config.ToolsConfig{}, config.AgentConfig{}, nil, RunNamespace)
 	if err != nil {
 		t.Fatalf("first build: %v", err)
 	}
-	p2, err := Build(a, config.ToolsConfig{}, config.AgentConfig{}, nil)
+	p2, err := Build(a, config.ToolsConfig{}, config.AgentConfig{}, nil, RunNamespace)
 	if err != nil {
 		t.Fatalf("second build: %v", err)
 	}
@@ -216,7 +216,7 @@ func TestBuildDeterministicNaming(t *testing.T) {
 func TestBuildAnnotations(t *testing.T) {
 	t.Run("starts-at is RFC3339 UTC", func(t *testing.T) {
 		a := makeAlert("TestAlert", "ns", "abcdef12", "warning")
-		p, err := Build(a, config.ToolsConfig{}, config.AgentConfig{}, nil)
+		p, err := Build(a, config.ToolsConfig{}, config.AgentConfig{}, nil, RunNamespace)
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -229,7 +229,7 @@ func TestBuildAnnotations(t *testing.T) {
 
 	t.Run("summary is included", func(t *testing.T) {
 		a := makeAlert("TestAlert", "ns", "abcdef12", "warning")
-		p, err := Build(a, config.ToolsConfig{}, config.AgentConfig{}, nil)
+		p, err := Build(a, config.ToolsConfig{}, config.AgentConfig{}, nil, RunNamespace)
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -244,7 +244,7 @@ func TestBuildAnnotations(t *testing.T) {
 		startsAt := strfmt.DateTime(time.Time{})
 		a.StartsAt = &startsAt
 
-		p, err := Build(a, config.ToolsConfig{}, config.AgentConfig{}, nil)
+		p, err := Build(a, config.ToolsConfig{}, config.AgentConfig{}, nil, RunNamespace)
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -260,7 +260,7 @@ func TestBuildAnnotations(t *testing.T) {
 		a := makeAlert("TestAlert", "ns", "abcdef12", "warning")
 		a.Annotations["summary"] = strings.Repeat("x", 300)
 
-		p, err := Build(a, config.ToolsConfig{}, config.AgentConfig{}, nil)
+		p, err := Build(a, config.ToolsConfig{}, config.AgentConfig{}, nil, RunNamespace)
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -274,7 +274,7 @@ func TestBuildRequest(t *testing.T) {
 	a := makeAlert("KubePodCrashLooping", "production", "abcdef12", "critical")
 	a.Annotations["runbook_url"] = "https://runbooks.example.com/KubePodCrashLooping"
 
-	p, err := Build(a, config.ToolsConfig{}, config.AgentConfig{}, nil)
+	p, err := Build(a, config.ToolsConfig{}, config.AgentConfig{}, nil, RunNamespace)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -295,7 +295,7 @@ func TestBuildRequestWithSkillPaths(t *testing.T) {
 	a := makeAlert("KubePodCrashLooping", "production", "abcdef12", "critical")
 
 	t.Run("no shared skills omits skill paths", func(t *testing.T) {
-		p, err := Build(a, config.ToolsConfig{}, config.AgentConfig{}, nil)
+		p, err := Build(a, config.ToolsConfig{}, config.AgentConfig{}, nil, RunNamespace)
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -313,7 +313,7 @@ func TestBuildRequestWithSkillPaths(t *testing.T) {
 				}},
 			},
 		}
-		p, err := Build(a, tc, config.AgentConfig{}, nil)
+		p, err := Build(a, tc, config.AgentConfig{}, nil, RunNamespace)
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -335,7 +335,7 @@ func TestBuildRequestWithSkillPaths(t *testing.T) {
 				{Image: "registry.example.com/skills-b:latest", Paths: []string{"/skills/beta"}},
 			},
 		}
-		p, err := Build(a, tc, config.AgentConfig{}, nil)
+		p, err := Build(a, tc, config.AgentConfig{}, nil, RunNamespace)
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -353,7 +353,7 @@ func TestBuildRequestWithSkillPaths(t *testing.T) {
 
 func TestBuildRequestWithoutRunbook(t *testing.T) {
 	a := makeAlert("TestAlert", "ns", "abcdef12", "warning")
-	p, err := Build(a, config.ToolsConfig{}, config.AgentConfig{}, nil)
+	p, err := Build(a, config.ToolsConfig{}, config.AgentConfig{}, nil, RunNamespace)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -611,7 +611,7 @@ func TestBuildRequestSanitizesAdversarialContent(t *testing.T) {
 				a.Labels[k] = v
 			}
 
-			p, err := Build(a, config.ToolsConfig{}, config.AgentConfig{}, nil)
+			p, err := Build(a, config.ToolsConfig{}, config.AgentConfig{}, nil, RunNamespace)
 			if err != nil {
 				t.Fatalf("unexpected error: %v", err)
 			}
@@ -632,7 +632,7 @@ func TestBuildRequestSanitizesAdversarialContent(t *testing.T) {
 
 func TestBuildTypeMeta(t *testing.T) {
 	a := makeAlert("TestAlert", "ns", "abcdef12", "warning")
-	p, err := Build(a, config.ToolsConfig{}, config.AgentConfig{}, nil)
+	p, err := Build(a, config.ToolsConfig{}, config.AgentConfig{}, nil, RunNamespace)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -649,7 +649,7 @@ func TestBuildWithTools(t *testing.T) {
 	a := makeAlert("TestAlert", "ns", "abcdef12", "warning")
 
 	t.Run("empty tools config omits all tools", func(t *testing.T) {
-		p, err := Build(a, config.ToolsConfig{}, config.AgentConfig{}, nil)
+		p, err := Build(a, config.ToolsConfig{}, config.AgentConfig{}, nil, RunNamespace)
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -673,7 +673,7 @@ func TestBuildWithTools(t *testing.T) {
 				{Image: "registry.example.com/skills:latest", Paths: []string{"/skills/prometheus"}},
 			},
 		}
-		p, err := Build(a, tc, config.AgentConfig{}, nil)
+		p, err := Build(a, tc, config.AgentConfig{}, nil, RunNamespace)
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -706,7 +706,7 @@ func TestBuildWithTools(t *testing.T) {
 				{Image: "registry.example.com/verify:latest", Paths: []string{"/skills/validation"}},
 			},
 		}
-		p, err := Build(a, tc, config.AgentConfig{}, nil)
+		p, err := Build(a, tc, config.AgentConfig{}, nil, RunNamespace)
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -742,7 +742,7 @@ func TestBuildWithTools(t *testing.T) {
 				{Image: "registry.example.com/analysis:latest", Paths: []string{"/skills/diagnostic"}},
 			},
 		}
-		p, err := Build(a, tc, config.AgentConfig{}, nil)
+		p, err := Build(a, tc, config.AgentConfig{}, nil, RunNamespace)
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -772,7 +772,7 @@ func TestBuildWithTools(t *testing.T) {
 				{Image: "registry.example.com/analysis:latest", Paths: []string{"/skills/diagnostic"}},
 			},
 		}
-		p, err := Build(a, tc, config.AgentConfig{}, nil)
+		p, err := Build(a, tc, config.AgentConfig{}, nil, RunNamespace)
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -944,7 +944,7 @@ func TestBuildWithAgentOverrides(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			p, err := Build(a, config.ToolsConfig{}, tt.agent, nil)
+			p, err := Build(a, config.ToolsConfig{}, tt.agent, nil, RunNamespace)
 			if err != nil {
 				t.Fatalf("unexpected error: %v", err)
 			}

@@ -68,7 +68,7 @@ type requestData struct {
 // safe against duplicate creation via Kubernetes 409 AlreadyExists.
 // Different occurrences of the same alert (different startsAt) produce
 // distinct AgenticRun names, allowing re-creation after cooldown.
-func Build(a *models.GettableAlert, tools config.ToolsConfig, agent config.AgentConfig, ignoredLabels []string) (*agenticv1alpha1.AgenticRun, error) {
+func Build(a *models.GettableAlert, tools config.ToolsConfig, agent config.AgentConfig, ignoredLabels []string, targetNamespace string) (*agenticv1alpha1.AgenticRun, error) {
 	if a.Fingerprint == nil {
 		return nil, fmt.Errorf("agenticrun: alert fingerprint is nil")
 	}
@@ -110,7 +110,7 @@ func Build(a *models.GettableAlert, tools config.ToolsConfig, agent config.Agent
 		},
 		ObjectMeta: metav1.ObjectMeta{
 			Name:        buildName(alertName, namespace, startsAt),
-			Namespace:   RunNamespace,
+			Namespace:   targetNamespace,
 			Labels:      buildLabels(alertName, severity, originalFP, stableFP),
 			Annotations: buildAnnotations(a),
 		},

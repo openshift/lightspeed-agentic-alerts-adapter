@@ -55,7 +55,7 @@ func main() {
 
 	runClient := agenticrun.NewClient(k8sClient, namespace, logger)
 
-	a := adapter.New(amClient, runClient, cfg, logger)
+	a := adapter.New(amClient, runClient, cfg, namespace, logger)
 	if err := a.Run(ctx); err != nil {
 		logger.Error("fatal error", "error", err)
 		os.Exit(1)

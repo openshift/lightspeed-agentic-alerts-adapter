@@ -32,20 +32,22 @@ type AgenticRunClient interface {
 // applying stateless deduplication (pre-run delay, active-run check,
 // and post-run delay) on each cycle.
 type Adapter struct {
-	alerts   AlertSource
-	arClient AgenticRunClient
-	cfg      config.Config
-	logger   *slog.Logger
+	alerts    AlertSource
+	arClient  AgenticRunClient
+	cfg       config.Config
+	namespace string
+	logger    *slog.Logger
 }
 
 // New creates an Adapter with the given alert source, run client,
-// config, and logger.
-func New(alerts AlertSource, arClient AgenticRunClient, cfg config.Config, logger *slog.Logger) *Adapter {
+// config, namespace, and logger.
+func New(alerts AlertSource, arClient AgenticRunClient, cfg config.Config, namespace string, logger *slog.Logger) *Adapter {
 	return &Adapter{
-		alerts:   alerts,
-		arClient: arClient,
-		cfg:      cfg,
-		logger:   logger,
+		alerts:    alerts,
+		arClient:  arClient,
+		cfg:       cfg,
+		namespace: namespace,
+		logger:    logger,
 	}
 }
 
@@ -157,7 +159,7 @@ func (a *Adapter) reconcile(ctx context.Context) {
 			continue
 		}
 
-		p, err := agenticrun.Build(alert, a.cfg.Tools, a.cfg.Agent, a.cfg.IgnoredLabels)
+		p, err := agenticrun.Build(alert, a.cfg.Tools, a.cfg.Agent, a.cfg.IgnoredLabels, a.namespace)
 		if err != nil {
 			a.logger.Error("failed to build run",
 				"alertname", alertName,
