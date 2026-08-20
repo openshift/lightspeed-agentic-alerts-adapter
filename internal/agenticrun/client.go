@@ -13,19 +13,20 @@ import (
 // Client creates and lists AgenticRun resources in the cluster.
 type Client struct {
 	client.Client
-	logger *slog.Logger
+	namespace string
+	logger    *slog.Logger
 }
 
 // NewClient creates a Client that wraps the given controller-runtime client.
-func NewClient(c client.Client, logger *slog.Logger) *Client {
-	return &Client{Client: c, logger: logger}
+func NewClient(c client.Client, namespace string, logger *slog.Logger) *Client {
+	return &Client{Client: c, namespace: namespace, logger: logger}
 }
 
 // ListAgenticRuns returns all AgenticRuns created by this adapter, filtered by the
 // source=alertmanager label.
 func (c *Client) ListAgenticRuns(ctx context.Context) ([]agenticv1alpha1.AgenticRun, error) {
 	var list agenticv1alpha1.AgenticRunList
-	if err := c.List(ctx, &list, client.MatchingLabels{LabelSource: sourceValue}); err != nil {
+	if err := c.List(ctx, &list, client.InNamespace(c.namespace), client.MatchingLabels{LabelSource: sourceValue}); err != nil {
 		return nil, fmt.Errorf("agenticrun: listing runs: %w", err)
 	}
 	return list.Items, nil

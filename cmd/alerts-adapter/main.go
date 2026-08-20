@@ -48,9 +48,14 @@ func main() {
 		os.Exit(1)
 	}
 
-	runClient := agenticrun.NewClient(k8sClient, logger)
+	namespace := os.Getenv("POD_NAMESPACE")
+	if namespace == "" {
+		namespace = agenticrun.RunNamespace
+	}
 
-	a := adapter.New(amClient, runClient, cfg, logger)
+	runClient := agenticrun.NewClient(k8sClient, namespace, logger)
+
+	a := adapter.New(amClient, runClient, cfg, namespace, logger)
 	if err := a.Run(ctx); err != nil {
 		logger.Error("fatal error", "error", err)
 		os.Exit(1)

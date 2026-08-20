@@ -5,7 +5,7 @@ The adapter has no deployment manifests yet. The ARCHITECTURE.md defines the int
 ## What Changes
 
 - Add a `manifests/` directory with all Kubernetes/OpenShift resource definitions needed to deploy the adapter.
-- Include: Namespace, ServiceAccount, Deployment, RBAC (RoleBinding for AlertManager access, ClusterRole + ClusterRoleBinding for AgenticRun management).
+- Include: Namespace, ServiceAccount, Deployment, RBAC (RoleBinding for AlertManager access, Role + RoleBinding for AgenticRun management in `openshift-lightspeed`).
 - Follow the resource specifications already defined in ARCHITECTURE.md.
 
 ## Capabilities

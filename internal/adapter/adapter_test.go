@@ -287,10 +287,11 @@ func TestReconcile(t *testing.T) {
 			rc := &fakeRunClient{runs: tt.runs, listErr: tt.runsErr, createErr: tt.createErr, wasCreated: tt.wasCreated}
 
 			a := &Adapter{
-				alerts: as,
-				arClient: rc,
-				cfg:    defaultTestConfig(),
-				logger: quietLogger(),
+				alerts:    as,
+				arClient:  rc,
+				cfg:       defaultTestConfig(),
+				namespace: agenticrun.RunNamespace,
+				logger:    quietLogger(),
 			}
 
 			a.reconcile(context.Background())
@@ -454,10 +455,11 @@ func TestReconcileSkipsSeverity(t *testing.T) {
 			rc := &fakeRunClient{}
 
 			a := &Adapter{
-				alerts: as,
-				arClient: rc,
-				cfg:    defaultTestConfig(),
-				logger: quietLogger(),
+				alerts:    as,
+				arClient:  rc,
+				cfg:       defaultTestConfig(),
+				namespace: agenticrun.RunNamespace,
+				logger:    quietLogger(),
 			}
 
 			a.reconcile(context.Background())
@@ -484,10 +486,11 @@ func TestReconcileWithTools(t *testing.T) {
 		}
 
 		a := &Adapter{
-			alerts: as,
-			arClient: rc,
-			cfg:    cfg,
-			logger: quietLogger(),
+			alerts:    as,
+			arClient:  rc,
+			cfg:       cfg,
+			namespace: agenticrun.RunNamespace,
+			logger:    quietLogger(),
 		}
 
 		a.reconcile(context.Background())
@@ -518,10 +521,11 @@ func TestReconcileWithTools(t *testing.T) {
 		}
 
 		a := &Adapter{
-			alerts: as,
-			arClient: rc,
-			cfg:    cfg,
-			logger: quietLogger(),
+			alerts:    as,
+			arClient:  rc,
+			cfg:       cfg,
+			namespace: agenticrun.RunNamespace,
+			logger:    quietLogger(),
 		}
 
 		a.reconcile(context.Background())
@@ -595,7 +599,7 @@ func TestReconcileZeroDelays(t *testing.T) {
 			cfg.PreRunDelay = tt.preRunDelay
 			cfg.PostRunDelay = tt.postRunDelay
 
-			a := &Adapter{alerts: as, arClient: rc, cfg: cfg, logger: quietLogger()}
+			a := &Adapter{alerts: as, arClient: rc, cfg: cfg, namespace: agenticrun.RunNamespace, logger: quietLogger()}
 			a.reconcile(context.Background())
 
 			if rc.createCalls != 1 {
@@ -621,10 +625,11 @@ func TestReconcileDedupsWithinSameCycle(t *testing.T) {
 	rc := &fakeRunClient{}
 
 	a := &Adapter{
-		alerts:   as,
-		arClient: rc,
-		cfg:      defaultTestConfig(),
-		logger:   quietLogger(),
+		alerts:    as,
+		arClient:  rc,
+		cfg:       defaultTestConfig(),
+		namespace: agenticrun.RunNamespace,
+		logger:    quietLogger(),
 	}
 
 	a.reconcile(context.Background())
