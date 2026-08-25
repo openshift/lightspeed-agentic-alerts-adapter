@@ -117,16 +117,6 @@ func (a *Adapter) reconcile(ctx context.Context) {
 			continue
 		}
 
-		if skipSeverity(alert) {
-			a.logger.Debug("alert skipped: low severity",
-				"alertname", alertName,
-				"fingerprint", fingerprint,
-				"severity", alert.Labels["severity"],
-			)
-			skipped++
-			continue
-		}
-
 		if a.cfg.PreRunDelay > 0 && tooEarly(alert, now, a.cfg.PreRunDelay) {
 			a.logger.Debug("alert skipped: pre-run delay",
 				"alertname", alertName,
@@ -220,11 +210,6 @@ func receiverNames(alert *models.GettableAlert) []string {
 	return names
 }
 
-func skipSeverity(alert *models.GettableAlert) bool {
-	sev := strings.ToLower(string(alert.Labels["severity"]))
-	return sev == "none" || sev == "info"
-}
-
 func tooEarly(alert *models.GettableAlert, now time.Time, threshold time.Duration) bool {
 	if alert.StartsAt == nil {
 		return true
@@ -309,4 +294,3 @@ func isTerminal(phase agenticv1alpha1.AgenticRunPhase) bool {
 	}
 	return false
 }
-
