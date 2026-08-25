@@ -20,7 +20,7 @@ The deploy script (`hack/deploy-e2e.sh`) SHALL patch manifests with test-specifi
 
 #### Scenario: ConfigMap is patched for fast testing
 - **WHEN** `hack/deploy-e2e.sh` runs
-- **THEN** the ConfigMap is patched with `pollInterval: 10s`, `postRunDelay: 1m`, and `filtering.allowedReceivers: [Default]` (uncommented)
+- **THEN** the ConfigMap is patched with `pollInterval: 10s`, `postRunDelay: 5m`, and `filtering.allowedReceivers: [default]` (uncommented)
 
 #### Scenario: Deployment waits for readiness
 - **WHEN** `hack/deploy-e2e.sh` completes
@@ -30,7 +30,7 @@ The deploy script (`hack/deploy-e2e.sh`) SHALL patch manifests with test-specifi
 The E2E test suite SHALL validate that a firing alert routed to a configured receiver results in an AgenticRun CR being created and reconciled by the live lightspeed-agentic-operator.
 
 #### Scenario: Firing alert creates AgenticRun
-- **GIVEN** AlertManager has a firing alert with severity `critical` routed to receiver `Default`
+- **GIVEN** a firing alert with severity `warning` is injected into all AlertManager replicas via the `/api/v2/alerts` API and routed to receiver `default`
 - **WHEN** the adapter polls AlertManager
 - **THEN** an AgenticRun CR is created in the `openshift-lightspeed` namespace with labels `alert-fingerprint` and `alert-dedup-fingerprint`
 
@@ -38,33 +38,33 @@ The E2E test suite SHALL validate that a firing alert routed to a configured rec
 The E2E test suite SHALL verify that alerts are correctly skipped based on adapter's deduplication filters (severity, receiver, pre-run delay, active AgenticRun, post-run delay).
 
 #### Scenario: Alert with severity info is skipped
-- **GIVEN** AlertManager has a firing alert with severity `info` routed to receiver `Default`
+- **GIVEN** a firing alert with severity `info` is injected into all AlertManager replicas
 - **WHEN** the adapter polls AlertManager
 - **THEN** no AgenticRun is created for this alert
 
 #### Scenario: Alert with severity none is skipped
-- **GIVEN** AlertManager has a firing alert with severity `none` routed to receiver `Default`
+- **GIVEN** a firing alert with severity `none` is injected into all AlertManager replicas
 - **WHEN** the adapter polls AlertManager
 - **THEN** no AgenticRun is created for this alert
 
 #### Scenario: Alert routed to non-allowed receiver is skipped
-- **GIVEN** the adapter config has `filtering.allowedReceivers: [Default]` and an alert is routed to receiver `OtherReceiver`
+- **GIVEN** the adapter config has `filtering.allowedReceivers: [default]` and a `severity: critical` alert is injected (routed to `Critical` receiver, not in allowlist)
 - **WHEN** the adapter polls AlertManager
 - **THEN** no AgenticRun is created for this alert
 
 #### Scenario: Alert with active AgenticRun is skipped
 - **GIVEN** an AgenticRun with phase `Analyzing` and label `alert-dedup-fingerprint: X` and label `source: alerts-adapter` exists
-- **WHEN** the adapter polls and finds a firing alert with dedup fingerprint X routed to `Default`
+- **WHEN** the adapter polls and finds a firing alert with dedup fingerprint X routed to `default`
 - **THEN** no additional AgenticRun is created
 
 #### Scenario: Alert within postRunDelay is skipped
-- **GIVEN** an AgenticRun with phase `Completed` exists for alert fingerprint X and completed less than `postRunDelay` ago (e.g., 30 seconds ago with `postRunDelay: 1m`)
-- **WHEN** the adapter polls and finds a firing alert with fingerprint X
+- **GIVEN** an AgenticRun with phase `Completed` (status patched via subresource with `Verified=True`) exists for alert dedup fingerprint X and completed less than `postRunDelay` ago (with `postRunDelay: 5m`)
+- **WHEN** the adapter polls and finds a firing alert (injected) with dedup fingerprint X
 - **THEN** no additional AgenticRun is created
 
 #### Scenario: Alert outside postRunDelay creates new AgenticRun
-- **GIVEN** an AgenticRun with phase `Failed` exists for alert fingerprint X and completed more than `postRunDelay` ago (e.g., 2 minutes ago with `postRunDelay: 1m`)
-- **WHEN** the adapter polls and finds a firing alert with fingerprint X
+- **GIVEN** an AgenticRun with phase `Failed` (status patched via subresource with `Analyzed=False`) exists for alert dedup fingerprint X and completed more than `postRunDelay` ago (10 minutes ago with `postRunDelay: 5m`)
+- **WHEN** the adapter polls and finds a firing alert (injected) with dedup fingerprint X
 - **THEN** a new AgenticRun is created
 
 ### Requirement: Fingerprint labels

@@ -67,8 +67,8 @@ E2E tests on a real OpenShift cluster with live AlertManager and operator are ne
 2. Patch `deployment.yaml` with `$IMAGE` env var (built in CI or specified locally)
 3. Patch `configmap.yaml` with test-friendly values:
    - `pollInterval: 10s` (faster than default 30s)
-   - `postRunDelay: 1m` (shorter than default 1h for testing cooldown logic)
-   - `filtering.allowedReceivers: [Default]` (uncommented — required for adapter to process alerts)
+   - `postRunDelay: 5m` (shorter than default 1h for testing cooldown logic, large enough to avoid flaky timing)
+   - `filtering.allowedReceivers: [default]` (uncommented — required for adapter to process alerts)
 4. Deploy with `oc apply -f`
 5. Wait for deployment to be available
 
@@ -124,4 +124,4 @@ Job will be presubmit and optional initially (can be made required after stabili
 - **[Risk] Operator dependency** → Tests depend on lightspeed-agentic-operator being deployed and compatible. Mitigation: deploy script verifies operator is present; document operator version requirements.
 - **[Risk] AlertManager state** → Tests may be affected by existing alerts in the cluster. Mitigation: tests use specific alert labels/receivers to isolate test alerts; cleanup after test runs.
 - **[Trade-off] Test execution time** → E2E tests will be slower than unit tests (~2-5 minutes vs <10 seconds). Acceptable given the value of full integration validation.
-- **[Trade-off] Real vs simulated alerts** → We rely on AlertManager's existing alerts or need to inject test alerts. Initial MVP will test against naturally-firing alerts or use AlertManager API to inject test alerts.
+- **[Trade-off] Real vs simulated alerts** → Tests inject alerts via AlertManager's `/api/v2/alerts` API using `oc exec` into AlertManager pods. Alerts must be injected into ALL AlertManager replicas because AlertManager's gossip protocol does not propagate API-injected alerts between replicas. The test framework handles multi-replica injection automatically.
