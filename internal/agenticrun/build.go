@@ -29,7 +29,7 @@ const (
 
 	LabelSource           = "agentic.openshift.io/source"
 	LabelFingerprint      = "agentic.openshift.io/alert-fingerprint"
-	LabelDedupFingerprint = "agentic.openshift.io/alert-dedup-fingerprint"
+	LabelDedupFingerprint = "agentic.openshift.io/alert-group-id"
 	LabelAlertName        = "agentic.openshift.io/alert-name"
 	LabelSeverity         = "agentic.openshift.io/alert-severity"
 	AnnotStartsAt         = "agentic.openshift.io/alert-starts-at"
@@ -38,8 +38,8 @@ const (
 	sourceValue = "alertmanager"
 
 	maxLabelValueLen = 63
-	fingerprintLen = 8
-	maxSummaryLen  = 256
+	fingerprintLen   = 8
+	maxSummaryLen    = 256
 )
 
 var (
@@ -49,7 +49,7 @@ var (
 
 	//go:embed request.tmpl
 	requestTemplateStr string
-	requestTemplate = template.Must(template.New("request").Parse(requestTemplateStr))
+	requestTemplate    = template.Must(template.New("request").Parse(requestTemplateStr))
 )
 
 type requestData struct {
@@ -174,11 +174,11 @@ func startsAtHash(t time.Time) string {
 // buildLabels sets Kubernetes labels for alert traceability and filtering.
 func buildLabels(alertName, severity, originalFingerprint, stableFingerprint string) map[string]string {
 	return map[string]string{
-		LabelSource:            sourceValue,
-		LabelFingerprint:       sanitizeLabelValue(originalFingerprint[:min(len(originalFingerprint), fingerprintLen)]),
+		LabelSource:           sourceValue,
+		LabelFingerprint:      sanitizeLabelValue(originalFingerprint[:min(len(originalFingerprint), fingerprintLen)]),
 		LabelDedupFingerprint: stableFingerprint,
-		LabelAlertName:         sanitizeLabelValue(strings.ToLower(alertName)),
-		LabelSeverity:          sanitizeLabelValue(severity),
+		LabelAlertName:        sanitizeLabelValue(strings.ToLower(alertName)),
+		LabelSeverity:         sanitizeLabelValue(severity),
 	}
 }
 

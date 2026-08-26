@@ -61,7 +61,7 @@ var _ = Describe("Reconciliation", func() {
 
 			By("Waiting for the adapter to create an AgenticRun")
 			Eventually(func() (string, error) {
-				return framework.GetResourcesByLabel(context.Background(), 
+				return framework.GetResourcesByLabel(context.Background(),
 					agenticRunAPIResource,
 					cfg.Namespace,
 					"agentic.openshift.io/source=alertmanager,agentic.openshift.io/alert-name=e2etestreconciliation",
@@ -71,7 +71,7 @@ var _ = Describe("Reconciliation", func() {
 				"expected an AgenticRun for the injected alert")
 		})
 
-		It("should set alert-fingerprint and alert-dedup-fingerprint labels", func() {
+		It("should set alert-fingerprint and alert-group-id labels", func() {
 			ignoredLabels := []string{"pod", "instance", "endpoint", "uid"}
 			expectedDedupFP := agenticrun.StableFingerprint(alertLabels, ignoredLabels)
 
@@ -85,7 +85,7 @@ var _ = Describe("Reconciliation", func() {
 					agenticRunAPIResource,
 					cfg.Namespace,
 					"agentic.openshift.io/source=alertmanager,agentic.openshift.io/alert-name=e2etestreconciliation",
-					"{range .items[*]}{.metadata.labels.agentic\\.openshift\\.io/alert-fingerprint},{.metadata.labels.agentic\\.openshift\\.io/alert-dedup-fingerprint}{\"\\n\"}{end}",
+					"{range .items[*]}{.metadata.labels.agentic\\.openshift\\.io/alert-fingerprint},{.metadata.labels.agentic\\.openshift\\.io/alert-group-id}{\"\\n\"}{end}",
 				)
 				if err != nil {
 					return false
@@ -102,14 +102,14 @@ var _ = Describe("Reconciliation", func() {
 					alertFP := parts[0]
 					dedupFP := parts[1]
 					// alert-fingerprint must be present and non-empty (AlertManager-assigned)
-					// alert-dedup-fingerprint must match the expected computed value
+					// alert-group-id must match the expected computed value
 					if alertFP != "" && dedupFP == expectedDedupFP {
 						return true
 					}
 				}
 				return false
 			}, 5*time.Minute, 10*time.Second).Should(BeTrue(),
-				fmt.Sprintf("AgenticRun should have alert-fingerprint set and alert-dedup-fingerprint=%s", expectedDedupFP))
+				fmt.Sprintf("AgenticRun should have alert-fingerprint set and alert-group-id=%s", expectedDedupFP))
 		})
 	})
 })

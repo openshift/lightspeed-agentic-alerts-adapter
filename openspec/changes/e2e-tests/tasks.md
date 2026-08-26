@@ -25,7 +25,7 @@
 - [x] 3.2 Test: verify adapter deployment is available and pods are running
 - [x] ~3.3 Test: query AlertManager for firing alerts~ — skipped: tests inject alerts explicitly via AlertManager API, making this precondition check redundant
 - [x] 3.4 Test: wait for adapter to create AgenticRun for injected alert (poll for AgenticRun with alert-name label)
-- [x] 3.5 Test: verify AgenticRun has correct labels (alert-fingerprint, alert-dedup-fingerprint)
+- [x] 3.5 Test: verify AgenticRun has correct labels (alert-fingerprint, alert-group-id)
 
 
 ## 4. Deduplication Tests
@@ -40,7 +40,7 @@
 
 ## 5. Fingerprint Tests
 
-- [x] 5.1 Test: verify AgenticRun has both `alert-fingerprint` and `alert-dedup-fingerprint` labels (covered in 3.5)
+- [x] 5.1 Test: verify AgenticRun has both `alert-fingerprint` and `alert-group-id` labels (covered in 3.5)
 - [x] 5.2 Test: inject two alerts differing only in `pod` label (ignored label), verify only one AgenticRun created (same dedup fingerprint)
 
 ## 6. Error Handling Tests

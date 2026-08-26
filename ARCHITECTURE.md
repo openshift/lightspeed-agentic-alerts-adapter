@@ -127,7 +127,7 @@ Examples:
 
 Components are sanitized to conform to DNS subdomain rules (RFC 1123): lowercased, non-alphanumeric characters replaced, truncated to fit the 63-character limit.
 
-Deduplication uses the `alert-dedup-fingerprint` label (stable FNV-64a hash of labels minus configurable ignored labels, truncated to 8 hex characters) to match alerts to existing AgenticRuns. The original AlertManager fingerprint is stored separately in the `alert-fingerprint` label for UI lookups. Neither fingerprint is part of the AgenticRun name — they are only stored as labels for matching.
+Deduplication uses the `alert-group-id` label (stable FNV-64a hash of labels minus configurable ignored labels, truncated to 8 hex characters) to match alerts to existing AgenticRuns. The original AlertManager fingerprint is stored separately in the `alert-fingerprint` label for UI lookups. Neither fingerprint is part of the AgenticRun name — they are only stored as labels for matching.
 
 ### Alert to AgenticRun Mapping
 
@@ -205,7 +205,7 @@ metadata:
   labels:
     agentic.openshift.io/source: alertmanager
     agentic.openshift.io/alert-fingerprint: <AlertManager fingerprint[:8]>
-    agentic.openshift.io/alert-dedup-fingerprint: <stable fingerprint[:8]>
+    agentic.openshift.io/alert-group-id: <stable fingerprint[:8]>
     agentic.openshift.io/alert-name: <alertname, lowercased>
     agentic.openshift.io/alert-severity: <severity>
   annotations:

@@ -3,15 +3,15 @@ Translate Alertmanager alerts into AgenticRun custom resources so the agentic op
 
 ## Requirements
 ### Requirement: Build an AgenticRun CR from a single alert
-The system SHALL convert an Alertmanager `GettableAlert` into an `AgenticRun` custom resource with deterministic naming, Kubernetes-safe metadata, and a templated request for the analysis agent. Two fingerprint labels SHALL be set: `agentic.openshift.io/alert-fingerprint` with the original AlertManager fingerprint (truncated to 8 characters) for UI lookups, and `agentic.openshift.io/alert-dedup-fingerprint` with the stable fingerprint computed from the alert's labels minus ignored labels for deduplication.
+The system SHALL convert an Alertmanager `GettableAlert` into an `AgenticRun` custom resource with deterministic naming, Kubernetes-safe metadata, and a templated request for the analysis agent. Two fingerprint labels SHALL be set: `agentic.openshift.io/alert-fingerprint` with the original AlertManager fingerprint (truncated to 8 characters) for UI lookups, and `agentic.openshift.io/alert-group-id` with the stable fingerprint computed from the alert's labels minus ignored labels for deduplication.
 
 #### Scenario: Alert with namespace label
 - **WHEN** the alert has a `namespace` label
-- **THEN** the AgenticRun name is `{alertname}-{namespace}-{startsAt_hash}`, `spec.targetNamespaces` is set to `[namespace]`, the `agentic.openshift.io/alert-fingerprint` label is set to the original AlertManager fingerprint (truncated to 8 characters), the `agentic.openshift.io/alert-dedup-fingerprint` label is set to the stable fingerprint, and the AgenticRun is created in `openshift-lightspeed`
+- **THEN** the AgenticRun name is `{alertname}-{namespace}-{startsAt_hash}`, `spec.targetNamespaces` is set to `[namespace]`, the `agentic.openshift.io/alert-fingerprint` label is set to the original AlertManager fingerprint (truncated to 8 characters), the `agentic.openshift.io/alert-group-id` label is set to the stable fingerprint, and the AgenticRun is created in `openshift-lightspeed`
 
 #### Scenario: Cluster-scoped alert (no namespace)
 - **WHEN** the alert has no `namespace` label
-- **THEN** the AgenticRun name is `{alertname}-{startsAt_hash}`, `spec.targetNamespaces` is omitted, the `agentic.openshift.io/alert-fingerprint` label is set to the original AlertManager fingerprint (truncated to 8 characters), the `agentic.openshift.io/alert-dedup-fingerprint` label is set to the stable fingerprint, and the AgenticRun is created in `openshift-lightspeed`
+- **THEN** the AgenticRun name is `{alertname}-{startsAt_hash}`, `spec.targetNamespaces` is omitted, the `agentic.openshift.io/alert-fingerprint` label is set to the original AlertManager fingerprint (truncated to 8 characters), the `agentic.openshift.io/alert-group-id` label is set to the stable fingerprint, and the AgenticRun is created in `openshift-lightspeed`
 
 #### Scenario: Deterministic naming produces idempotent creates
 - **WHEN** the same alert is passed to Build twice
@@ -19,7 +19,7 @@ The system SHALL convert an Alertmanager `GettableAlert` into an `AgenticRun` cu
 
 #### Scenario: Second alert for the same problem is deduplicated
 - **WHEN** two alerts differ only in ignored labels (e.g., different pod names) and an active AgenticRun already exists for the first alert
-- **THEN** the second alert produces the same `agentic.openshift.io/alert-dedup-fingerprint` label value, `hasActiveRun` matches the existing AgenticRun, and no new AgenticRun is created
+- **THEN** the second alert produces the same `agentic.openshift.io/alert-group-id` label value, `hasActiveRun` matches the existing AgenticRun, and no new AgenticRun is created
 
 ### Requirement: Sanitize alert data for Kubernetes metadata
 The system SHALL sanitize alert values to conform to Kubernetes naming and label restrictions.

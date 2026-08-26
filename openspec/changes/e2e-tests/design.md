@@ -22,7 +22,7 @@ E2E tests on a real OpenShift cluster with live AlertManager and operator are ne
 **Goals:**
 - Validate the full reconciliation loop on a live OpenShift cluster: real firing alert → adapter processes → AgenticRun created → live operator reconciles it.
 - Test deduplication logic end-to-end: verify alerts are correctly skipped based on severity, receiver filtering, pre-run delay, active AgenticRun presence, and post-run delay.
-- Verify `alert-fingerprint` and `alert-dedup-fingerprint` labels are set correctly on created AgenticRun CRs.
+- Verify `alert-fingerprint` and `alert-group-id` labels are set correctly on created AgenticRun CRs.
 - Verify ConfigMap changes are picked up by the adapter on the next poll cycle (no restart required).
 - Test error handling: AlertManager unreachable, Kubernetes API errors.
 - Tests run in OpenShift CI on a provisioned cluster and locally via `make test-e2e` (requires `oc login` to a cluster).
@@ -84,7 +84,7 @@ E2E tests on a real OpenShift cluster with live AlertManager and operator are ne
 **Decision:** E2E tests will cover:
 1. **Happy path:** Firing alert (routed to configured receiver) → AgenticRun created with correct labels
 2. **Deduplication:** Alerts skipped due to severity `info`/`none`, receiver not in allowlist, active AgenticRun, within `postRunDelay` of terminal AgenticRun
-3. **Fingerprint labels:** Verify `alert-fingerprint` and `alert-dedup-fingerprint` are set correctly
+3. **Fingerprint labels:** Verify `alert-fingerprint` and `alert-group-id` are set correctly
 4. **Error handling:** 409 AlreadyExists on AgenticRun create is no-op (logged at Info level)
 
 **Rationale:** These scenarios cover the critical integration points and most common failure modes.
