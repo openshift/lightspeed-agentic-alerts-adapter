@@ -82,5 +82,5 @@ The deploy script (`hack/deploy-e2e.sh`) patches the adapter ConfigMap with test
 - **Active run deduplication**: No duplicate AgenticRun created when an active run exists for the same dedup fingerprint
 - **Ignored label deduplication**: Alerts differing only in ignored labels (`pod`, `instance`, etc.) are treated as duplicates
 - **Post-run delay**: No new AgenticRun created within `postRunDelay` after a terminal run; new run created after delay expires
-- **Fingerprint labels**: Both `alert-fingerprint` and `alert-dedup-fingerprint` are set
+- **Fingerprint labels**: Both `alert-fingerprint` and `alert-group-id` are set
 - **Error handling**: 409 AlreadyExists logged at Info level (not Error)

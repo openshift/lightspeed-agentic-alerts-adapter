@@ -32,7 +32,7 @@ The E2E test suite SHALL validate that a firing alert routed to a configured rec
 #### Scenario: Firing alert creates AgenticRun
 - **GIVEN** a firing alert with severity `warning` is injected into all AlertManager replicas via the `/api/v2/alerts` API and routed to receiver `default`
 - **WHEN** the adapter polls AlertManager
-- **THEN** an AgenticRun CR is created in the `openshift-lightspeed` namespace with labels `alert-fingerprint` and `alert-dedup-fingerprint`
+- **THEN** an AgenticRun CR is created in the `openshift-lightspeed` namespace with labels `alert-fingerprint` and `alert-group-id`
 
 ### Requirement: Deduplication behavior
 The E2E test suite SHALL verify that alerts are correctly skipped based on adapter's deduplication filters (severity, receiver, pre-run delay, active AgenticRun, post-run delay).
@@ -53,7 +53,7 @@ The E2E test suite SHALL verify that alerts are correctly skipped based on adapt
 - **THEN** no AgenticRun is created for this alert
 
 #### Scenario: Alert with active AgenticRun is skipped
-- **GIVEN** an AgenticRun with phase `Analyzing` and label `alert-dedup-fingerprint: X` and label `source: alerts-adapter` exists
+- **GIVEN** an AgenticRun with phase `Analyzing` and label `alert-group-id: X` and label `source: alerts-adapter` exists
 - **WHEN** the adapter polls and finds a firing alert with dedup fingerprint X routed to `default`
 - **THEN** no additional AgenticRun is created
 
@@ -68,17 +68,17 @@ The E2E test suite SHALL verify that alerts are correctly skipped based on adapt
 - **THEN** a new AgenticRun is created
 
 ### Requirement: Fingerprint labels
-The E2E test suite SHALL verify that created AgenticRun CRs have both `alert-fingerprint` (original AlertManager fingerprint) and `alert-dedup-fingerprint` (stable fingerprint computed from labels minus ignored labels) labels set correctly.
+The E2E test suite SHALL verify that created AgenticRun CRs have both `alert-fingerprint` (original AlertManager fingerprint) and `alert-group-id` (stable fingerprint computed from labels minus ignored labels) labels set correctly.
 
 #### Scenario: Fingerprint labels are set
 - **GIVEN** AlertManager returns a firing alert with fingerprint `abc123` and labels including `alertname`, `namespace`, `pod`
 - **WHEN** the adapter creates an AgenticRun
-- **THEN** the AgenticRun has label `alert-fingerprint: abc123` and label `alert-dedup-fingerprint: <computed-hash>` (non-empty)
+- **THEN** the AgenticRun has label `alert-fingerprint: abc123` and label `alert-group-id: <computed-hash>` (non-empty)
 
 #### Scenario: Dedup fingerprint ignores configured labels
 - **GIVEN** the adapter config has `deduplication.ignoredLabels: [pod, instance, endpoint, uid]` and two alerts differ only in `pod` label
 - **WHEN** the adapter processes both alerts
-- **THEN** the first alert creates an AgenticRun with `alert-dedup-fingerprint: X`, and the second alert is skipped (because it would produce the same fingerprint X, proving deduplication works)
+- **THEN** the first alert creates an AgenticRun with `alert-group-id: X`, and the second alert is skipped (because it would produce the same fingerprint X, proving deduplication works)
 
 ### Requirement: Error handling
 The E2E test suite SHALL verify that the adapter handles expected errors gracefully (409 AlreadyExists, transient failures).

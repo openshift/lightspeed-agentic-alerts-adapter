@@ -66,7 +66,7 @@ var _ = Describe("Deduplication", func() {
 
 			By("Waiting for multiple poll cycles and verifying no AgenticRun is created")
 			Consistently(func() (string, error) {
-				return framework.GetResourcesByLabel(context.Background(), 
+				return framework.GetResourcesByLabel(context.Background(),
 					agenticRunAPIResource,
 					cfg.Namespace,
 					"agentic.openshift.io/source=alertmanager,agentic.openshift.io/alert-name=e2etestseverityinfo",
@@ -83,7 +83,7 @@ var _ = Describe("Deduplication", func() {
 
 			By("Waiting for multiple poll cycles and verifying no AgenticRun is created")
 			Consistently(func() (string, error) {
-				return framework.GetResourcesByLabel(context.Background(), 
+				return framework.GetResourcesByLabel(context.Background(),
 					agenticRunAPIResource,
 					cfg.Namespace,
 					"agentic.openshift.io/source=alertmanager,agentic.openshift.io/alert-name=e2etestseveritynone",
@@ -128,7 +128,7 @@ var _ = Describe("Deduplication", func() {
 
 			By("Waiting for multiple poll cycles and verifying no AgenticRun is created")
 			Consistently(func() (string, error) {
-				return framework.GetResourcesByLabel(context.Background(), 
+				return framework.GetResourcesByLabel(context.Background(),
 					agenticRunAPIResource,
 					cfg.Namespace,
 					"agentic.openshift.io/source=alertmanager,agentic.openshift.io/alert-name=e2etestreceivercritical",
@@ -171,7 +171,7 @@ metadata:
   namespace: %s
   labels:
     agentic.openshift.io/source: alertmanager
-    agentic.openshift.io/alert-dedup-fingerprint: %s
+    agentic.openshift.io/alert-group-id: %s
     agentic.openshift.io/alert-name: e2etestactivededup
     agentic.openshift.io/alert-severity: warning
 spec:
@@ -192,10 +192,10 @@ spec:
 
 			By("Verifying no duplicate AgenticRun is created while the active run exists")
 			Consistently(func() int {
-				names, err := framework.GetResourcesByLabel(context.Background(), 
+				names, err := framework.GetResourcesByLabel(context.Background(),
 					agenticRunAPIResource,
 					cfg.Namespace,
-					fmt.Sprintf("agentic.openshift.io/source=alertmanager,agentic.openshift.io/alert-dedup-fingerprint=%s", testDedupFP),
+					fmt.Sprintf("agentic.openshift.io/source=alertmanager,agentic.openshift.io/alert-group-id=%s", testDedupFP),
 					"{.items[*].metadata.name}",
 				)
 				if err != nil {
@@ -249,7 +249,7 @@ spec:
 
 			By("Waiting for the adapter to create an AgenticRun")
 			Eventually(func() (string, error) {
-				return framework.GetResourcesByLabel(context.Background(), 
+				return framework.GetResourcesByLabel(context.Background(),
 					agenticRunAPIResource,
 					cfg.Namespace,
 					"agentic.openshift.io/source=alertmanager,agentic.openshift.io/alert-name=e2etestignoredlabels",
@@ -263,7 +263,7 @@ spec:
 
 			By("Verifying no additional AgenticRun is created")
 			Consistently(func() int {
-				names, err := framework.GetResourcesByLabel(context.Background(), 
+				names, err := framework.GetResourcesByLabel(context.Background(),
 					agenticRunAPIResource,
 					cfg.Namespace,
 					"agentic.openshift.io/source=alertmanager,agentic.openshift.io/alert-name=e2etestignoredlabels",
@@ -320,7 +320,7 @@ metadata:
   namespace: %s
   labels:
     agentic.openshift.io/source: alertmanager
-    agentic.openshift.io/alert-dedup-fingerprint: %s
+    agentic.openshift.io/alert-group-id: %s
     agentic.openshift.io/alert-name: e2etestpostrundelay
     agentic.openshift.io/alert-severity: warning
 spec:
@@ -347,7 +347,7 @@ spec:
 
 			By("Verifying no new AgenticRun is created within postRunDelay")
 			Consistently(func() int {
-				names, err := framework.GetResourcesByLabel(context.Background(), 
+				names, err := framework.GetResourcesByLabel(context.Background(),
 					agenticRunAPIResource,
 					cfg.Namespace,
 					"agentic.openshift.io/source=alertmanager,agentic.openshift.io/alert-name=e2etestpostrundelay",
@@ -404,7 +404,7 @@ metadata:
   namespace: %s
   labels:
     agentic.openshift.io/source: alertmanager
-    agentic.openshift.io/alert-dedup-fingerprint: %s
+    agentic.openshift.io/alert-group-id: %s
     agentic.openshift.io/alert-name: e2etestpostrunexpired
     agentic.openshift.io/alert-severity: warning
 spec:
@@ -431,7 +431,7 @@ spec:
 
 			By("Waiting for the adapter to create a new AgenticRun")
 			Eventually(func() int {
-				names, err := framework.GetResourcesByLabel(context.Background(), 
+				names, err := framework.GetResourcesByLabel(context.Background(),
 					agenticRunAPIResource,
 					cfg.Namespace,
 					"agentic.openshift.io/source=alertmanager,agentic.openshift.io/alert-name=e2etestpostrunexpired",
@@ -497,7 +497,7 @@ metadata:
     agentic.openshift.io/source: alertmanager
     agentic.openshift.io/alert-name: e2etest409handling
     agentic.openshift.io/alert-severity: warning
-    agentic.openshift.io/alert-dedup-fingerprint: %s
+    agentic.openshift.io/alert-group-id: %s
 spec:
   request: "E2E test 409 handling"
   analysis:
