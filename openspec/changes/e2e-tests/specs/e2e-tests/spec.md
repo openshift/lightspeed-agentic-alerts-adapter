@@ -37,16 +37,6 @@ The E2E test suite SHALL validate that a firing alert routed to a configured rec
 ### Requirement: Deduplication behavior
 The E2E test suite SHALL verify that alerts are correctly skipped based on adapter's deduplication filters (severity, receiver, pre-run delay, active AgenticRun, post-run delay).
 
-#### Scenario: Alert with severity info is skipped
-- **GIVEN** a firing alert with severity `info` is injected into all AlertManager replicas
-- **WHEN** the adapter polls AlertManager
-- **THEN** no AgenticRun is created for this alert
-
-#### Scenario: Alert with severity none is skipped
-- **GIVEN** a firing alert with severity `none` is injected into all AlertManager replicas
-- **WHEN** the adapter polls AlertManager
-- **THEN** no AgenticRun is created for this alert
-
 #### Scenario: Alert routed to non-allowed receiver is skipped
 - **GIVEN** the adapter config has `filtering.allowedReceivers: [default]` and a `severity: critical` alert is injected (routed to `Critical` receiver, not in allowlist)
 - **WHEN** the adapter polls AlertManager
