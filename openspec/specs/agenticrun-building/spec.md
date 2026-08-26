@@ -41,7 +41,7 @@ The system SHALL sanitize alert values to conform to Kubernetes naming and label
 - **THEN** those characters are replaced with hyphens and leading/trailing non-alphanumeric characters are trimmed
 
 ### Requirement: Render a structured request from alert data
-The system SHALL render the `spec.request` field using an embedded Go template that includes the alert name, severity, namespace, description, and runbook URL. All alert-sourced values SHALL be sanitized before template rendering by stripping Unicode control characters (except newline), Unicode format characters, and backtick runs of 3 or more. Only allow-listed fields SHALL be passed to the template; the full Labels map SHALL NOT be included in the template data.
+The system SHALL render the `spec.request` field using an embedded Go template that includes the alert name, severity, namespace, description, and runbook URL. All alert-sourced values SHALL be sanitized before template rendering by stripping Unicode control characters (except newline), Unicode format characters, and backtick runs of 3 or more. Only allow-listed fields SHALL be passed to the template; the full Labels map SHALL NOT be included in the template data. The skill hint SHALL include paths from both shared skills and analysis-level skills.
 
 #### Scenario: Alert with all annotation fields populated
 - **WHEN** the alert has summary and description annotations
@@ -66,6 +66,22 @@ The system SHALL render the `spec.request` field using an embedded Go template t
 #### Scenario: Extra labels are not exposed in the request
 - **WHEN** an alert has labels beyond the allow-listed fields (alertname, severity, namespace)
 - **THEN** those extra labels do not appear in the rendered request
+
+#### Scenario: Skill hint includes shared skill paths
+- **WHEN** shared skills are configured with paths
+- **THEN** the rendered request SHALL contain the skill hint listing those paths (prefixed with `/app`)
+
+#### Scenario: Skill hint includes analysis-level skill paths
+- **WHEN** analysis-level skills are configured with paths but no shared skills are configured
+- **THEN** the rendered request SHALL contain the skill hint listing the analysis skill paths (prefixed with `/app`)
+
+#### Scenario: Skill hint includes both shared and analysis skill paths
+- **WHEN** both shared skills and analysis-level skills are configured with paths
+- **THEN** the rendered request SHALL contain the skill hint listing paths from both sources (each prefixed with `/app`)
+
+#### Scenario: No skill hint when no skills configured
+- **WHEN** neither shared skills nor analysis-level skills are configured
+- **THEN** the rendered request SHALL contain the generic investigation instruction instead of a skill hint
 
 ### Requirement: Configure all three workflow steps with tools
 The system SHALL set the analysis, execution, and verification steps on the AgenticRun, each referencing the `default` agent. The system SHALL support shared tools and per-step tool overrides.
