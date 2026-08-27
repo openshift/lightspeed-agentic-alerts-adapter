@@ -294,13 +294,13 @@ func TestBuildRequest(t *testing.T) {
 func TestBuildRequestWithSkillPaths(t *testing.T) {
 	a := makeAlert("KubePodCrashLooping", "production", "abcdef12", "critical")
 
-	t.Run("no shared skills omits skill paths", func(t *testing.T) {
+	t.Run("no skills omits skill hint", func(t *testing.T) {
 		p, err := Build(a, config.ToolsConfig{}, config.AgentConfig{}, nil, RunNamespace)
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
 		if strings.Contains(p.Spec.Request, "Investigate using the skill at") {
-			t.Error("request should not contain skill paths when no shared skills set")
+			t.Error("request should not contain skill hint when no skills set")
 		}
 	})
 
@@ -343,6 +343,50 @@ func TestBuildRequestWithSkillPaths(t *testing.T) {
 			"Investigate using the skill at",
 			"/app/skills/alpha",
 			"/app/skills/beta",
+		} {
+			if !strings.Contains(p.Spec.Request, want) {
+				t.Errorf("request does not contain %q\nfull request:\n%s", want, p.Spec.Request)
+			}
+		}
+	})
+
+	t.Run("analysis-only skills lists paths in hint", func(t *testing.T) {
+		tc := config.ToolsConfig{
+			Analysis: []agenticv1alpha1.SkillsSource{
+				{Image: "registry.example.com/analysis:latest", Paths: []string{"/skills/diagnostic"}},
+			},
+		}
+		p, err := Build(a, tc, config.AgentConfig{}, nil, RunNamespace)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		for _, want := range []string{
+			"Investigate using the skill at",
+			"/app/skills/diagnostic",
+		} {
+			if !strings.Contains(p.Spec.Request, want) {
+				t.Errorf("request does not contain %q\nfull request:\n%s", want, p.Spec.Request)
+			}
+		}
+	})
+
+	t.Run("shared and analysis skills lists all paths in hint", func(t *testing.T) {
+		tc := config.ToolsConfig{
+			Shared: []agenticv1alpha1.SkillsSource{
+				{Image: "registry.example.com/shared:latest", Paths: []string{"/skills/common"}},
+			},
+			Analysis: []agenticv1alpha1.SkillsSource{
+				{Image: "registry.example.com/analysis:latest", Paths: []string{"/skills/diagnostic"}},
+			},
+		}
+		p, err := Build(a, tc, config.AgentConfig{}, nil, RunNamespace)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		for _, want := range []string{
+			"Investigate using the skill at",
+			"/app/skills/common",
+			"/app/skills/diagnostic",
 		} {
 			if !strings.Contains(p.Spec.Request, want) {
 				t.Errorf("request does not contain %q\nfull request:\n%s", want, p.Spec.Request)

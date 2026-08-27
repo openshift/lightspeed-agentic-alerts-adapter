@@ -84,7 +84,7 @@ func Build(a *models.GettableAlert, tools config.ToolsConfig, agent config.Agent
 	}
 	startsAt := time.Time(*a.StartsAt)
 
-	request, err := buildRequest(a, tools.Shared)
+	request, err := buildRequest(a, tools.Shared, tools.Analysis)
 	if err != nil {
 		return nil, err
 	}
@@ -201,9 +201,14 @@ func buildAnnotations(a *models.GettableAlert) map[string]string {
 }
 
 // buildRequest renders the embedded template with alert data for the analysis agent.
-func buildRequest(a *models.GettableAlert, sharedSkills []agenticv1alpha1.SkillsSource) (string, error) {
+func buildRequest(a *models.GettableAlert, sharedSkills, analysisSkills []agenticv1alpha1.SkillsSource) (string, error) {
 	var skillPaths []string
 	for _, s := range sharedSkills {
+		for _, p := range s.Paths {
+			skillPaths = append(skillPaths, "/app"+p)
+		}
+	}
+	for _, s := range analysisSkills {
 		for _, p := range s.Paths {
 			skillPaths = append(skillPaths, "/app"+p)
 		}
