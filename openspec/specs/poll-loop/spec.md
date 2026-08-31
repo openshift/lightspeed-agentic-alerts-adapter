@@ -3,7 +3,7 @@ Continuously poll AlertManager for firing alerts and create AgenticRun CRs for n
 
 ## Requirements
 ### Requirement: Poll AlertManager on a fixed interval
-The system SHALL read operational parameters (`pollInterval`, `preRunDelay`, `postRunDelay`) from the `ConfigSource` at the start of each reconcile cycle and use them for that cycle's filtering and deduplication rules. The default poll interval is 30 seconds. When the loaded `pollInterval` differs from the current ticker interval, the system SHALL reset the ticker to the new interval. The filter order SHALL be: receiver allowlist -> severity -> pre-run delay -> active AgenticRun -> post-run delay.
+The system SHALL read operational parameters (`pollInterval`, `preRunDelay`, `postRunDelay`) from the `ConfigSource` at the start of each reconcile cycle and use them for that cycle's filtering and deduplication rules. The default poll interval is 30 seconds. When the loaded `pollInterval` differs from the current ticker interval, the system SHALL reset the ticker to the new interval. The filter order SHALL be: receiver allowlist -> pre-run delay -> active AgenticRun -> post-run delay.
 
 #### Scenario: Normal poll cycle
 - **WHEN** the poll interval elapses

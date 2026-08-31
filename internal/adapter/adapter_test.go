@@ -99,7 +99,7 @@ func makeRun(fingerprint string, conditions []metav1.Condition) agenticv1alpha1.
 			Namespace: "openshift-lightspeed",
 			Labels: map[string]string{
 				agenticrun.LabelDedupFingerprint: fingerprint,
-				agenticrun.LabelSource:                          "alertmanager",
+				agenticrun.LabelSource:           "alertmanager",
 			},
 		},
 		Status: agenticv1alpha1.AgenticRunStatus{
@@ -306,48 +306,6 @@ func TestReconcile(t *testing.T) {
 	}
 }
 
-func TestSkipSeverity(t *testing.T) {
-	now := time.Now()
-
-	tests := []struct {
-		name     string
-		severity string
-		want     bool
-	}{
-		{name: "none is skipped", severity: "none", want: true},
-		{name: "info is skipped", severity: "info", want: true},
-		{name: "None mixed case is skipped", severity: "None", want: true},
-		{name: "INFO uppercase is skipped", severity: "INFO", want: true},
-		{name: "NONE uppercase is skipped", severity: "NONE", want: true},
-		{name: "Info mixed case is skipped", severity: "Info", want: true},
-		{name: "warning is not skipped", severity: "warning", want: false},
-		{name: "critical is not skipped", severity: "critical", want: false},
-		{name: "empty string is not skipped", severity: "", want: false},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			alert := makeAlertWithSeverity("TestAlert", "abc123", now, tt.severity)
-			got := skipSeverity(alert)
-			if got != tt.want {
-				t.Errorf("skipSeverity(severity=%q) = %v, want %v", tt.severity, got, tt.want)
-			}
-		})
-	}
-
-	t.Run("missing severity label is not skipped", func(t *testing.T) {
-		alert := &models.GettableAlert{
-			Receivers: []*models.ReceiverReference{{Name: ptr("Critical")}},
-			Alert: models.Alert{
-				Labels: models.LabelSet{"alertname": "TestAlert"},
-			},
-		}
-		if skipSeverity(alert) {
-			t.Error("skipSeverity() = true for missing severity label, want false")
-		}
-	})
-}
-
 func TestSkipReceiver(t *testing.T) {
 	tests := []struct {
 		name      string
@@ -442,8 +400,8 @@ func TestReconcileSkipsSeverity(t *testing.T) {
 		severity        string
 		wantCreateCalls int
 	}{
-		{name: "none severity not processed", severity: "none", wantCreateCalls: 0},
-		{name: "info severity not processed", severity: "info", wantCreateCalls: 0},
+		{name: "none severity processed", severity: "none", wantCreateCalls: 1},
+		{name: "info severity processed", severity: "info", wantCreateCalls: 1},
 		{name: "warning severity processed", severity: "warning", wantCreateCalls: 1},
 		{name: "critical severity processed", severity: "critical", wantCreateCalls: 1},
 	}
@@ -650,10 +608,10 @@ func TestRunExitsOnContextCancel(t *testing.T) {
 	cfg.PollInterval = time.Hour
 
 	a := &Adapter{
-		alerts: as,
+		alerts:   as,
 		arClient: rc,
-		cfg:    cfg,
-		logger: quietLogger(),
+		cfg:      cfg,
+		logger:   quietLogger(),
 	}
 
 	ctx, cancel := context.WithCancel(context.Background())
