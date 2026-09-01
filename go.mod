@@ -6,7 +6,7 @@ require (
 	github.com/go-openapi/runtime v0.33.1
 	github.com/go-openapi/strfmt v0.27.0
 	github.com/onsi/ginkgo/v2 v2.32.1
-	github.com/onsi/gomega v1.42.1
+	github.com/onsi/gomega v1.43.0
 	github.com/openshift/lightspeed-agentic-operator/api v0.0.0-20260710093841-6e7c2bec3cc5
 	github.com/prometheus/alertmanager v0.34.0
 	go.yaml.in/yaml/v3 v3.0.5
