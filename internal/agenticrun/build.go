@@ -275,6 +275,27 @@ func resolveAgent(perStep, global string) string {
 	return defaultAgent
 }
 
+// NextAvailableName returns baseName when unused, otherwise returns the first
+// available deterministic retry name using -retry-N suffixes.
+func NextAvailableName(baseName string, existingNames []string) string {
+	existing := make(map[string]struct{}, len(existingNames))
+	for _, name := range existingNames {
+		existing[name] = struct{}{}
+	}
+
+	if _, ok := existing[baseName]; !ok {
+		return baseName
+	}
+
+	for i := 1; ; i++ {
+		suffix := fmt.Sprintf("-retry-%d", i)
+		candidate := truncateDNS(baseName, maxLabelValueLen-len(suffix)) + suffix
+		if _, ok := existing[candidate]; !ok {
+			return candidate
+		}
+	}
+}
+
 func truncateDNS(s string, maxLen int) string {
 	if len(s) <= maxLen {
 		return s

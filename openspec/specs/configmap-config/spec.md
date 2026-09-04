@@ -73,6 +73,10 @@ The system SHALL read the `POD_NAMESPACE` environment variable to determine the 
 ### Requirement: Restructure config YAML with filtering and deduplication sections
 The system SHALL support a structured config YAML where `allowedReceivers` is nested under a `filtering` section and `ignoredLabels` is nested under a `deduplication` section. Top-level `allowedReceivers` SHALL continue to be accepted for backward compatibility.
 
+#### Scenario: Structured configuration is provided
+- **WHEN** the ConfigMap contains `filtering.allowedReceivers` and `deduplication.ignoredLabels`
+- **THEN** the system loads both values from their respective structured sections
+
 ### Requirement: Support ignored labels configuration
 The system SHALL support a `deduplication.ignoredLabels` field in the ConfigMap YAML that specifies which alert labels to exclude when computing the stable fingerprint. When the field is absent, the system SHALL use the default list: `[pod, instance, endpoint, uid]`. When the field is explicitly set, the specified list fully replaces the default (no merging).
 
