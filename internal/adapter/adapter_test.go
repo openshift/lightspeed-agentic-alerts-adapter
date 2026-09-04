@@ -5,6 +5,7 @@ import (
 	"errors"
 	"io"
 	"log/slog"
+	"strings"
 	"testing"
 	"time"
 
@@ -93,9 +94,13 @@ func makeAlertWithSeverity(name, fingerprint string, startsAt time.Time, severit
 }
 
 func makeRun(fingerprint string, conditions []metav1.Condition) agenticv1alpha1.AgenticRun {
+	return makeRunWithName("test-"+fingerprint, fingerprint, conditions)
+}
+
+func makeRunWithName(name, fingerprint string, conditions []metav1.Condition) agenticv1alpha1.AgenticRun {
 	return agenticv1alpha1.AgenticRun{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      "test-" + fingerprint,
+			Name:      name,
 			Namespace: "openshift-lightspeed",
 			Labels: map[string]string{
 				agenticrun.LabelDedupFingerprint: fingerprint,
@@ -116,6 +121,11 @@ func TestReconcile(t *testing.T) {
 	pastPostDelay := now.Add(-2 * time.Hour)
 
 	highCPUFP := stableFP(models.LabelSet{"alertname": "HighCPU", "severity": "warning"})
+	emergencyStoppedAlert := makeAlert("HighCPU", "abcdef1234567890", oldEnough)
+	emergencyStoppedBase, err := agenticrun.Build(emergencyStoppedAlert, config.ToolsConfig{}, config.AgentConfig{}, config.DefaultIgnoredLabels, agenticrun.RunNamespace)
+	if err != nil {
+		t.Fatalf("build base run for EmergencyStopped test: %v", err)
+	}
 
 	tests := []struct {
 		name            string
@@ -127,6 +137,7 @@ func TestReconcile(t *testing.T) {
 		runsErr         error
 		createErr       error
 		wasCreated      *bool
+		wantNameSuffix  string
 	}{
 		{
 			name:            "new alert creates run",
@@ -225,6 +236,36 @@ func TestReconcile(t *testing.T) {
 			wantCreated: 0,
 		},
 		{
+			name:   "emergencystopped run within post-run delay skipped",
+			alerts: models.GettableAlerts{makeAlert("HighCPU", "abcdef1234567890", oldEnough)},
+			runs: []agenticv1alpha1.AgenticRun{
+				makeRun(highCPUFP, []metav1.Condition{
+					{
+						Type:               agenticv1alpha1.AgenticRunConditionEmergencyStopped,
+						Status:             metav1.ConditionTrue,
+						LastTransitionTime: metav1.NewTime(withinPostDelay),
+					},
+				}),
+			},
+			wantCreated: 0,
+		},
+		{
+			name:   "emergencystopped run outside post-run delay creates replacement run",
+			alerts: models.GettableAlerts{emergencyStoppedAlert},
+			runs: []agenticv1alpha1.AgenticRun{
+				makeRunWithName(emergencyStoppedBase.Name, highCPUFP, []metav1.Condition{
+					{
+						Type:               agenticv1alpha1.AgenticRunConditionEmergencyStopped,
+						Status:             metav1.ConditionTrue,
+						LastTransitionTime: metav1.NewTime(pastPostDelay),
+					},
+				}),
+			},
+			wantCreated:     1,
+			wantCreateCalls: 1,
+			wantNameSuffix:  "-retry-1",
+		},
+		{
 			name:        "alertmanager error skips cycle",
 			alertsErr:   errors.New("connection refused"),
 			wantCreated: 0,
@@ -301,6 +342,14 @@ func TestReconcile(t *testing.T) {
 			}
 			if rc.createCalls != tt.wantCreateCalls {
 				t.Errorf("CreateAgenticRun called %d times, want %d", rc.createCalls, tt.wantCreateCalls)
+			}
+			if tt.wantNameSuffix != "" {
+				if len(rc.created) != 1 {
+					t.Fatalf("created %d runs, want 1", len(rc.created))
+				}
+				if !strings.HasSuffix(rc.created[0].Name, tt.wantNameSuffix) {
+					t.Errorf("created run name = %q, want suffix %q", rc.created[0].Name, tt.wantNameSuffix)
+				}
 			}
 		})
 	}
