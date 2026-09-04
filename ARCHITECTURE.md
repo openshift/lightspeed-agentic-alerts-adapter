@@ -358,6 +358,10 @@ subjects:
 | `ALERTMANAGER_URL` | `https://alertmanager-main.openshift-monitoring.svc:9094` | AlertManager API endpoint |
 | `POD_NAMESPACE` | `openshift-lightspeed` | Adapter's namespace (set via downward API in the deployment manifest) |
 
+### AgenticOLSConfig
+
+The adapter reads the cluster-scoped `AgenticOLSConfig` singleton named `cluster` at the start of each poll cycle. If `spec.suspended` is `true`, the adapter skips the current cycle before polling AlertManager or accessing AgenticRuns. If the CRD or singleton object is absent, the adapter behaves as if suspended mode is disabled.
+
 ### ConfigMap
 
 The `alerts-adapter-config` ConfigMap is mounted as a volume at `/etc/alerts-adapter/` and read once at startup from the `config.yaml` key. If the file is missing or malformed, defaults are used. The operator watches the ConfigMap and restarts the adapter pod when the config changes.

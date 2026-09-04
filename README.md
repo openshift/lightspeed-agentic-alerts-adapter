@@ -53,6 +53,23 @@ The adapter runs as a single-replica Deployment in the `openshift-lightspeed` na
 |---|---|---|
 | `ALERTMANAGER_URL` | `https://alertmanager-main.openshift-monitoring.svc:9094` | AlertManager API endpoint |
 
+### Suspended mode
+
+The adapter checks the cluster-scoped `AgenticOLSConfig` singleton named `cluster` at the start of each poll cycle. When `spec.suspended` is `true`, the adapter skips that poll cycle before polling AlertManager or accessing `AgenticRun` resources.
+
+When the `AgenticOLSConfig` CRD or singleton object is absent, the adapter behaves as if suspended mode is disabled. If reading `AgenticOLSConfig` fails for another reason, the adapter logs the error and skips the current poll cycle; the next poll retries.
+
+Example:
+
+```yaml
+apiVersion: agentic.openshift.io/v1alpha1
+kind: AgenticOLSConfig
+metadata:
+  name: cluster
+spec:
+  suspended: true
+```
+
 ### ConfigMap
 
 Runtime-tunable parameters are read from the `alerts-adapter-config` ConfigMap in the `openshift-lightspeed` namespace (key: `config.yaml`), mounted as a volume and read once at startup. The operator restarts the adapter pod when the ConfigMap changes. If the ConfigMap is missing, defaults are used. Invalid YAML or unparseable duration values cause the adapter to fail to start.
