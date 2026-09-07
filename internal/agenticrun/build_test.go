@@ -407,6 +407,36 @@ func TestBuildRequestWithoutRunbook(t *testing.T) {
 	}
 }
 
+func TestNextAvailableName(t *testing.T) {
+	t.Run("returns base name when unused", func(t *testing.T) {
+		base := "testalert-ns-895c8977"
+		got := NextAvailableName(base, []string{"other-run"})
+		if got != base {
+			t.Errorf("NextAvailableName() = %q, want %q", got, base)
+		}
+	})
+
+	t.Run("returns next retry suffix", func(t *testing.T) {
+		base := "testalert-ns-895c8977"
+		got := NextAvailableName(base, []string{base, base + "-retry-1"})
+		want := base + "-retry-2"
+		if got != want {
+			t.Errorf("NextAvailableName() = %q, want %q", got, want)
+		}
+	})
+
+	t.Run("truncates base to preserve name length", func(t *testing.T) {
+		base := strings.Repeat("a", maxLabelValueLen)
+		got := NextAvailableName(base, []string{base})
+		if len(got) > maxLabelValueLen {
+			t.Fatalf("NextAvailableName() length = %d, want <= %d", len(got), maxLabelValueLen)
+		}
+		if !strings.HasSuffix(got, "-retry-1") {
+			t.Errorf("NextAvailableName() = %q, want retry suffix", got)
+		}
+	})
+}
+
 func TestBuildName(t *testing.T) {
 	testTime := time.Date(2026, 1, 15, 10, 30, 0, 0, time.UTC)
 	hash := startsAtHash(testTime)
@@ -627,8 +657,8 @@ func TestBuildRequestSanitizesAdversarialContent(t *testing.T) {
 			wantAbsent:  []string{"real desc```"},
 		},
 		{
-			name:      "adversarial alertname is sanitized",
-			alertName: "FakeAlert\x00\x1bRealPayload",
+			name:        "adversarial alertname is sanitized",
+			alertName:   "FakeAlert\x00\x1bRealPayload",
 			wantPresent: []string{"FakeAlertRealPayload"},
 		},
 		{

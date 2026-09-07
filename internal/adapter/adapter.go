@@ -159,6 +159,10 @@ func (a *Adapter) reconcile(ctx context.Context) {
 			continue
 		}
 
+		if hasEmergencyStoppedNameConflict(p.Name, stableFP, runs) {
+			p.Name = agenticrun.NextAvailableName(p.Name, runNames(runs))
+		}
+
 		wasCreated, err := a.arClient.CreateAgenticRun(ctx, p)
 		if err != nil {
 			a.logger.Error("failed to create run",
@@ -230,6 +234,29 @@ func hasActiveRun(stableFingerprint string, runs []agenticv1alpha1.AgenticRun) b
 	return false
 }
 
+// hasEmergencyStoppedNameConflict reports whether name belongs to a matching
+// EmergencyStopped AgenticRun.
+func hasEmergencyStoppedNameConflict(name, stableFingerprint string, runs []agenticv1alpha1.AgenticRun) bool {
+	for i := range runs {
+		if runs[i].Name != name || runs[i].Labels[agenticrun.LabelDedupFingerprint] != stableFingerprint {
+			continue
+		}
+		if agenticv1alpha1.DerivePhase(runs[i].Status.Conditions) == agenticv1alpha1.AgenticRunPhaseEmergencyStopped {
+			return true
+		}
+	}
+	return false
+}
+
+// runNames returns the names of the supplied AgenticRuns.
+func runNames(runs []agenticv1alpha1.AgenticRun) []string {
+	names := make([]string, 0, len(runs))
+	for i := range runs {
+		names = append(names, runs[i].Name)
+	}
+	return names
+}
+
 func tooRecent(stableFingerprint string, runs []agenticv1alpha1.AgenticRun, now time.Time, window time.Duration) bool {
 	for i := range runs {
 		if runs[i].Labels[agenticrun.LabelDedupFingerprint] != stableFingerprint {
@@ -258,6 +285,8 @@ func terminalTime(p *agenticv1alpha1.AgenticRun) *time.Time {
 		condType = agenticv1alpha1.AgenticRunConditionDenied
 	case agenticv1alpha1.AgenticRunPhaseEscalated:
 		condType = agenticv1alpha1.AgenticRunConditionEscalated
+	case agenticv1alpha1.AgenticRunPhaseEmergencyStopped:
+		condType = agenticv1alpha1.AgenticRunConditionEmergencyStopped
 	default:
 		return nil
 	}
@@ -289,7 +318,8 @@ func isTerminal(phase agenticv1alpha1.AgenticRunPhase) bool {
 	case agenticv1alpha1.AgenticRunPhaseCompleted,
 		agenticv1alpha1.AgenticRunPhaseFailed,
 		agenticv1alpha1.AgenticRunPhaseDenied,
-		agenticv1alpha1.AgenticRunPhaseEscalated:
+		agenticv1alpha1.AgenticRunPhaseEscalated,
+		agenticv1alpha1.AgenticRunPhaseEmergencyStopped:
 		return true
 	}
 	return false
