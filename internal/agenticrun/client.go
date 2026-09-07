@@ -10,23 +10,29 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
+const LabelSourceTarget = "agentic.openshift.io/alert-source-target"
+
 // Client creates and lists AgenticRun resources in the cluster.
 type Client struct {
 	client.Client
 	namespace string
+	target    string
 	logger    *slog.Logger
 }
 
 // NewClient creates a Client that wraps the given controller-runtime client.
-func NewClient(c client.Client, namespace string, logger *slog.Logger) *Client {
-	return &Client{Client: c, namespace: namespace, logger: logger}
+func NewClient(c client.Client, namespace, target string, logger *slog.Logger) *Client {
+	return &Client{Client: c, namespace: namespace, target: target, logger: logger}
 }
 
 // ListAgenticRuns returns all AgenticRuns created by this adapter, filtered by the
-// source=alertmanager label.
+// source=alertmanager and source target labels.
 func (c *Client) ListAgenticRuns(ctx context.Context) ([]agenticv1alpha1.AgenticRun, error) {
 	var list agenticv1alpha1.AgenticRunList
-	if err := c.List(ctx, &list, client.InNamespace(c.namespace), client.MatchingLabels{LabelSource: sourceValue}); err != nil {
+	if err := c.List(ctx, &list, client.InNamespace(c.namespace), client.MatchingLabels{
+		LabelSource:       sourceValue,
+		LabelSourceTarget: c.target,
+	}); err != nil {
 		return nil, fmt.Errorf("agenticrun: listing runs: %w", err)
 	}
 	return list.Items, nil
@@ -35,6 +41,10 @@ func (c *Client) ListAgenticRuns(ctx context.Context) ([]agenticv1alpha1.Agentic
 // CreateAgenticRun creates an AgenticRun resource in the cluster.
 // It returns true if the AgenticRun was created, false if it already existed.
 func (c *Client) CreateAgenticRun(ctx context.Context, p *agenticv1alpha1.AgenticRun) (bool, error) {
+	if p.Labels == nil {
+		p.Labels = map[string]string{}
+	}
+	p.Labels[LabelSourceTarget] = c.target
 	if err := c.Create(ctx, p); err != nil {
 		if apierrors.IsAlreadyExists(err) {
 			c.logger.Info("run already exists", "name", p.Name, "namespace", p.Namespace)
