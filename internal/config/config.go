@@ -12,9 +12,9 @@ import (
 )
 
 const (
-	DefaultPollInterval  = 30 * time.Second
-	DefaultPreRunDelay   = 0
-	DefaultPostRunDelay  = 1 * time.Hour
+	DefaultPollInterval = 30 * time.Second
+	DefaultPreRunDelay  = 0
+	DefaultPostRunDelay = 1 * time.Hour
 
 	DefaultConfigPath = "/etc/alerts-adapter/config.yaml"
 )
@@ -39,9 +39,9 @@ type ToolsConfig struct {
 
 // Config holds the adapter's runtime-tunable parameters.
 type Config struct {
-	PollInterval    time.Duration
-	PreRunDelay     time.Duration
-	PostRunDelay    time.Duration
+	PollInterval     time.Duration
+	PreRunDelay      time.Duration
+	PostRunDelay     time.Duration
 	AllowedReceivers []string
 	IgnoredLabels    []string
 	Tools            ToolsConfig
@@ -51,26 +51,26 @@ type Config struct {
 // Default returns a Config with the default values.
 func Default() Config {
 	return Config{
-		PollInterval:    DefaultPollInterval,
-		PreRunDelay:     DefaultPreRunDelay,
-		PostRunDelay:    DefaultPostRunDelay,
+		PollInterval:     DefaultPollInterval,
+		PreRunDelay:      DefaultPreRunDelay,
+		PostRunDelay:     DefaultPostRunDelay,
 		AllowedReceivers: nil,
 		IgnoredLabels:    append([]string{}, DefaultIgnoredLabels...),
 	}
 }
 
 type configFile struct {
-	PollInterval     Duration         `yaml:"pollInterval"`
-	PreRunDelay      Duration         `yaml:"preRunDelay"`
-	PostRunDelay     Duration         `yaml:"postRunDelay"`
-	AllowedReceivers *[]string        `yaml:"allowedReceivers"`
-	Filtering        filteringEntry   `yaml:"filtering"`
+	PollInterval     Duration           `yaml:"pollInterval"`
+	PreRunDelay      Duration           `yaml:"preRunDelay"`
+	PostRunDelay     Duration           `yaml:"postRunDelay"`
+	AllowedReceivers *[]string          `yaml:"allowedReceivers"`
+	Filtering        filteringEntry     `yaml:"filtering"`
 	Deduplication    deduplicationEntry `yaml:"deduplication"`
-	Tools            toolsEntry       `yaml:"tools"`
-	Analysis         stepEntry        `yaml:"analysis"`
-	Execution        stepEntry        `yaml:"execution"`
-	Verification     stepEntry        `yaml:"verification"`
-	Agent            agentEntry       `yaml:"agent"`
+	Tools            toolsEntry         `yaml:"tools"`
+	Analysis         stepEntry          `yaml:"analysis"`
+	Execution        stepEntry          `yaml:"execution"`
+	Verification     stepEntry          `yaml:"verification"`
+	Agent            agentEntry         `yaml:"agent"`
 }
 
 type filteringEntry struct {

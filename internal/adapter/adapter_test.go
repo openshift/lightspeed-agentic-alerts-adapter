@@ -83,6 +83,20 @@ func defaultTestConfig() config.Config {
 	}
 }
 
+func testAdapter(as AlertSource, rc AgenticRunClient, cfg config.Config) *Adapter {
+	return &Adapter{
+		targets: []Target{{
+			Name:      "local",
+			Alerts:    as,
+			ARClient:  rc,
+			Namespace: agenticrun.RunNamespace,
+		}},
+		suspension: &fakeSuspensionSource{},
+		cfg:        cfg,
+		logger:     quietLogger(),
+	}
+}
+
 func stableFP(labels models.LabelSet) string {
 	return agenticrun.StableFingerprint(labels, config.DefaultIgnoredLabels)
 }
@@ -342,14 +356,7 @@ func TestReconcile(t *testing.T) {
 			as := &fakeAlertSource{alerts: tt.alerts, err: tt.alertsErr}
 			rc := &fakeRunClient{runs: tt.runs, listErr: tt.runsErr, createErr: tt.createErr, wasCreated: tt.wasCreated}
 
-			a := &Adapter{
-				alerts:     as,
-				arClient:   rc,
-				suspension: &fakeSuspensionSource{},
-				cfg:        defaultTestConfig(),
-				namespace:  agenticrun.RunNamespace,
-				logger:     quietLogger(),
-			}
+			a := testAdapter(as, rc, defaultTestConfig())
 
 			a.reconcile(context.Background())
 
@@ -477,14 +484,7 @@ func TestReconcileSkipsSeverity(t *testing.T) {
 			as := &fakeAlertSource{alerts: models.GettableAlerts{alert}}
 			rc := &fakeRunClient{}
 
-			a := &Adapter{
-				alerts:     as,
-				arClient:   rc,
-				suspension: &fakeSuspensionSource{},
-				cfg:        defaultTestConfig(),
-				namespace:  agenticrun.RunNamespace,
-				logger:     quietLogger(),
-			}
+			a := testAdapter(as, rc, defaultTestConfig())
 
 			a.reconcile(context.Background())
 
@@ -509,14 +509,7 @@ func TestReconcileWithTools(t *testing.T) {
 			{Image: "registry.example.com/skills:latest", Paths: []string{"/skills/prometheus"}},
 		}
 
-		a := &Adapter{
-			alerts:     as,
-			arClient:   rc,
-			suspension: &fakeSuspensionSource{},
-			cfg:        cfg,
-			namespace:  agenticrun.RunNamespace,
-			logger:     quietLogger(),
-		}
+		a := testAdapter(as, rc, cfg)
 
 		a.reconcile(context.Background())
 
@@ -545,14 +538,7 @@ func TestReconcileWithTools(t *testing.T) {
 			{Image: "registry.example.com/exec:latest", Paths: []string{"/skills/remediation"}},
 		}
 
-		a := &Adapter{
-			alerts:     as,
-			arClient:   rc,
-			suspension: &fakeSuspensionSource{},
-			cfg:        cfg,
-			namespace:  agenticrun.RunNamespace,
-			logger:     quietLogger(),
-		}
+		a := testAdapter(as, rc, cfg)
 
 		a.reconcile(context.Background())
 
@@ -625,7 +611,7 @@ func TestReconcileZeroDelays(t *testing.T) {
 			cfg.PreRunDelay = tt.preRunDelay
 			cfg.PostRunDelay = tt.postRunDelay
 
-			a := &Adapter{alerts: as, arClient: rc, suspension: &fakeSuspensionSource{}, cfg: cfg, namespace: agenticrun.RunNamespace, logger: quietLogger()}
+			a := testAdapter(as, rc, cfg)
 			a.reconcile(context.Background())
 
 			if rc.createCalls != 1 {
@@ -650,14 +636,7 @@ func TestReconcileDedupsWithinSameCycle(t *testing.T) {
 	}
 	rc := &fakeRunClient{}
 
-	a := &Adapter{
-		alerts:     as,
-		arClient:   rc,
-		suspension: &fakeSuspensionSource{},
-		cfg:        defaultTestConfig(),
-		namespace:  agenticrun.RunNamespace,
-		logger:     quietLogger(),
-	}
+	a := testAdapter(as, rc, defaultTestConfig())
 
 	a.reconcile(context.Background())
 
@@ -669,6 +648,87 @@ func TestReconcileDedupsWithinSameCycle(t *testing.T) {
 	}
 }
 
+func TestReconcileTargets(t *testing.T) {
+	now := time.Now()
+	alert := makeAlert("HighCPU", "abcdef1234567890", now.Add(-10*time.Minute))
+
+	tests := []struct {
+		name          string
+		targets       []Target
+		wantLocalRuns int
+		wantSpokeRuns int
+	}{
+		{
+			name: "equivalent alerts on separate targets create independently",
+			targets: func() []Target {
+				localRuns := &fakeRunClient{}
+				spokeRuns := &fakeRunClient{}
+				return []Target{
+					{Name: "local", Alerts: &fakeAlertSource{alerts: models.GettableAlerts{alert}}, ARClient: localRuns, Namespace: agenticrun.RunNamespace},
+					{Name: "spoke-1", Alerts: &fakeAlertSource{alerts: models.GettableAlerts{alert}}, ARClient: spokeRuns, Namespace: agenticrun.RunNamespace},
+				}
+			}(),
+			wantLocalRuns: 1,
+			wantSpokeRuns: 1,
+		},
+		{
+			name: "active run on local target does not suppress spoke target",
+			targets: func() []Target {
+				stable := stableFP(alert.Labels)
+				localRuns := &fakeRunClient{runs: []agenticv1alpha1.AgenticRun{
+					makeRun(stable, []metav1.Condition{{Type: "Analyzed", Status: metav1.ConditionUnknown}}),
+				}}
+				spokeRuns := &fakeRunClient{}
+				return []Target{
+					{Name: "local", Alerts: &fakeAlertSource{alerts: models.GettableAlerts{alert}}, ARClient: localRuns, Namespace: agenticrun.RunNamespace},
+					{Name: "spoke-1", Alerts: &fakeAlertSource{alerts: models.GettableAlerts{alert}}, ARClient: spokeRuns, Namespace: agenticrun.RunNamespace},
+				}
+			}(),
+			wantSpokeRuns: 1,
+		},
+		{
+			name: "failed target does not prevent healthy target",
+			targets: func() []Target {
+				spokeRuns := &fakeRunClient{}
+				return []Target{
+					{Name: "failed-spoke", Alerts: &fakeAlertSource{err: errors.New("unavailable")}},
+					{Name: "spoke-1", Alerts: &fakeAlertSource{alerts: models.GettableAlerts{alert}}, ARClient: spokeRuns, Namespace: agenticrun.RunNamespace},
+				}
+			}(),
+			wantSpokeRuns: 1,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			a := &Adapter{
+				targets:    tt.targets,
+				suspension: &fakeSuspensionSource{},
+				cfg:        defaultTestConfig(),
+				logger:     quietLogger(),
+			}
+			a.reconcile(context.Background())
+
+			for _, target := range tt.targets {
+				runs, ok := target.ARClient.(*fakeRunClient)
+				if !ok {
+					continue
+				}
+				switch target.Name {
+				case "local":
+					if runs.createCalls != tt.wantLocalRuns {
+						t.Errorf("local CreateAgenticRun calls = %d, want %d", runs.createCalls, tt.wantLocalRuns)
+					}
+				case "spoke-1":
+					if runs.createCalls != tt.wantSpokeRuns {
+						t.Errorf("spoke CreateAgenticRun calls = %d, want %d", runs.createCalls, tt.wantSpokeRuns)
+					}
+				}
+			}
+		})
+	}
+}
+
 func TestRunExitsOnContextCancel(t *testing.T) {
 	as := &fakeAlertSource{}
 	rc := &fakeRunClient{}
@@ -676,13 +736,7 @@ func TestRunExitsOnContextCancel(t *testing.T) {
 	cfg := defaultTestConfig()
 	cfg.PollInterval = time.Hour
 
-	a := &Adapter{
-		alerts:     as,
-		arClient:   rc,
-		suspension: &fakeSuspensionSource{},
-		cfg:        cfg,
-		logger:     quietLogger(),
-	}
+	a := testAdapter(as, rc, cfg)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	done := make(chan error, 1)
@@ -725,11 +779,14 @@ func TestReconcileSkipsCycleForSuspensionState(t *testing.T) {
 			ss := &fakeSuspensionSource{suspended: tt.suspended, err: tt.err}
 
 			a := &Adapter{
-				alerts:     as,
-				arClient:   rc,
+				targets: []Target{{
+					Name:      "local",
+					Alerts:    as,
+					ARClient:  rc,
+					Namespace: agenticrun.RunNamespace,
+				}},
 				suspension: ss,
 				cfg:        defaultTestConfig(),
-				namespace:  agenticrun.RunNamespace,
 				logger:     quietLogger(),
 			}
 

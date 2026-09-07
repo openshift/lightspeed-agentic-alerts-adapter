@@ -21,7 +21,7 @@ func newTestClient(t *testing.T) *Client {
 
 	fc := fake.NewClientBuilder().WithScheme(scheme).Build()
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
-	return &Client{Client: fc, namespace: RunNamespace, logger: logger}
+	return &Client{Client: fc, namespace: RunNamespace, target: "local", logger: logger}
 }
 
 func TestCreateAgenticRun(t *testing.T) {
@@ -54,6 +54,9 @@ func TestCreateAgenticRun(t *testing.T) {
 
 	if got.Spec.Request != "test request" {
 		t.Errorf("request = %q, want %q", got.Spec.Request, "test request")
+	}
+	if got.Labels[LabelSourceTarget] != "local" {
+		t.Errorf("source target = %q, want %q", got.Labels[LabelSourceTarget], "local")
 	}
 }
 
@@ -101,7 +104,10 @@ func TestListAgenticRuns(t *testing.T) {
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "matching-abcdef12",
 			Namespace: RunNamespace,
-			Labels:    map[string]string{LabelSource: sourceValue},
+			Labels: map[string]string{
+				LabelSource:       sourceValue,
+				LabelSourceTarget: "local",
+			},
 		},
 		Spec: agenticv1alpha1.AgenticRunSpec{
 			Request:  "matching",

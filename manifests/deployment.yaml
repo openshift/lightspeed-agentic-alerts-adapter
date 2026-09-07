@@ -36,6 +36,10 @@ spec:
           env:
             - name: ALERTMANAGER_URL
               value: https://alertmanager-main.openshift-monitoring.svc:9094
+            # Comma-separated kubeconfig Secret names for spoke clusters.
+            # Example: spoke-1,spoke-2
+            - name: SPOKE_KUBECONFIG_SECRET_NAMES
+              value: "spoke-1"
             - name: POD_NAMESPACE
               valueFrom:
                 fieldRef:
