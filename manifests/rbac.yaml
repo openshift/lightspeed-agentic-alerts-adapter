@@ -37,3 +37,27 @@ subjects:
   - kind: ServiceAccount
     name: lightspeed-agentic-alerts-adapter
     namespace: openshift-lightspeed
+---
+# AgenticOLSConfig: read cluster-wide suspension state.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: lightspeed-agentic-alerts-adapter-agenticolsconfig
+rules:
+  - apiGroups: ["agentic.openshift.io"]
+    resources: ["agenticolsconfigs"]
+    resourceNames: ["cluster"]
+    verbs: ["get"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: lightspeed-agentic-alerts-adapter-agenticolsconfig
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: lightspeed-agentic-alerts-adapter-agenticolsconfig
+subjects:
+  - kind: ServiceAccount
+    name: lightspeed-agentic-alerts-adapter
+    namespace: openshift-lightspeed

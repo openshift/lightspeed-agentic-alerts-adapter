@@ -19,11 +19,13 @@ import (
 )
 
 type fakeAlertSource struct {
-	alerts models.GettableAlerts
-	err    error
+	alerts   models.GettableAlerts
+	err      error
+	getCalls int
 }
 
 func (f *fakeAlertSource) GetAlerts(_ context.Context) (models.GettableAlerts, error) {
+	f.getCalls++
 	return f.alerts, f.err
 }
 
@@ -32,11 +34,13 @@ type fakeRunClient struct {
 	listErr     error
 	createErr   error
 	created     []*agenticv1alpha1.AgenticRun
+	listCalls   int
 	createCalls int
 	wasCreated  *bool
 }
 
 func (f *fakeRunClient) ListAgenticRuns(_ context.Context) ([]agenticv1alpha1.AgenticRun, error) {
+	f.listCalls++
 	return f.runs, f.listErr
 }
 
@@ -50,6 +54,17 @@ func (f *fakeRunClient) CreateAgenticRun(_ context.Context, p *agenticv1alpha1.A
 	}
 	f.created = append(f.created, p)
 	return true, nil
+}
+
+type fakeSuspensionSource struct {
+	suspended bool
+	err       error
+	calls     int
+}
+
+func (f *fakeSuspensionSource) Suspended(_ context.Context) (bool, error) {
+	f.calls++
+	return f.suspended, f.err
 }
 
 func quietLogger() *slog.Logger {
@@ -328,11 +343,12 @@ func TestReconcile(t *testing.T) {
 			rc := &fakeRunClient{runs: tt.runs, listErr: tt.runsErr, createErr: tt.createErr, wasCreated: tt.wasCreated}
 
 			a := &Adapter{
-				alerts:    as,
-				arClient:  rc,
-				cfg:       defaultTestConfig(),
-				namespace: agenticrun.RunNamespace,
-				logger:    quietLogger(),
+				alerts:     as,
+				arClient:   rc,
+				suspension: &fakeSuspensionSource{},
+				cfg:        defaultTestConfig(),
+				namespace:  agenticrun.RunNamespace,
+				logger:     quietLogger(),
 			}
 
 			a.reconcile(context.Background())
@@ -462,11 +478,12 @@ func TestReconcileSkipsSeverity(t *testing.T) {
 			rc := &fakeRunClient{}
 
 			a := &Adapter{
-				alerts:    as,
-				arClient:  rc,
-				cfg:       defaultTestConfig(),
-				namespace: agenticrun.RunNamespace,
-				logger:    quietLogger(),
+				alerts:     as,
+				arClient:   rc,
+				suspension: &fakeSuspensionSource{},
+				cfg:        defaultTestConfig(),
+				namespace:  agenticrun.RunNamespace,
+				logger:     quietLogger(),
 			}
 
 			a.reconcile(context.Background())
@@ -493,11 +510,12 @@ func TestReconcileWithTools(t *testing.T) {
 		}
 
 		a := &Adapter{
-			alerts:    as,
-			arClient:  rc,
-			cfg:       cfg,
-			namespace: agenticrun.RunNamespace,
-			logger:    quietLogger(),
+			alerts:     as,
+			arClient:   rc,
+			suspension: &fakeSuspensionSource{},
+			cfg:        cfg,
+			namespace:  agenticrun.RunNamespace,
+			logger:     quietLogger(),
 		}
 
 		a.reconcile(context.Background())
@@ -528,11 +546,12 @@ func TestReconcileWithTools(t *testing.T) {
 		}
 
 		a := &Adapter{
-			alerts:    as,
-			arClient:  rc,
-			cfg:       cfg,
-			namespace: agenticrun.RunNamespace,
-			logger:    quietLogger(),
+			alerts:     as,
+			arClient:   rc,
+			suspension: &fakeSuspensionSource{},
+			cfg:        cfg,
+			namespace:  agenticrun.RunNamespace,
+			logger:     quietLogger(),
 		}
 
 		a.reconcile(context.Background())
@@ -606,7 +625,7 @@ func TestReconcileZeroDelays(t *testing.T) {
 			cfg.PreRunDelay = tt.preRunDelay
 			cfg.PostRunDelay = tt.postRunDelay
 
-			a := &Adapter{alerts: as, arClient: rc, cfg: cfg, namespace: agenticrun.RunNamespace, logger: quietLogger()}
+			a := &Adapter{alerts: as, arClient: rc, suspension: &fakeSuspensionSource{}, cfg: cfg, namespace: agenticrun.RunNamespace, logger: quietLogger()}
 			a.reconcile(context.Background())
 
 			if rc.createCalls != 1 {
@@ -632,11 +651,12 @@ func TestReconcileDedupsWithinSameCycle(t *testing.T) {
 	rc := &fakeRunClient{}
 
 	a := &Adapter{
-		alerts:    as,
-		arClient:  rc,
-		cfg:       defaultTestConfig(),
-		namespace: agenticrun.RunNamespace,
-		logger:    quietLogger(),
+		alerts:     as,
+		arClient:   rc,
+		suspension: &fakeSuspensionSource{},
+		cfg:        defaultTestConfig(),
+		namespace:  agenticrun.RunNamespace,
+		logger:     quietLogger(),
 	}
 
 	a.reconcile(context.Background())
@@ -657,10 +677,11 @@ func TestRunExitsOnContextCancel(t *testing.T) {
 	cfg.PollInterval = time.Hour
 
 	a := &Adapter{
-		alerts:   as,
-		arClient: rc,
-		cfg:      cfg,
-		logger:   quietLogger(),
+		alerts:     as,
+		arClient:   rc,
+		suspension: &fakeSuspensionSource{},
+		cfg:        cfg,
+		logger:     quietLogger(),
 	}
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -676,5 +697,56 @@ func TestRunExitsOnContextCancel(t *testing.T) {
 		}
 	case <-time.After(2 * time.Second):
 		t.Fatal("Run did not exit after context cancellation")
+	}
+}
+
+func TestReconcileSkipsCycleForSuspensionState(t *testing.T) {
+	tests := []struct {
+		name      string
+		suspended bool
+		err       error
+	}{
+		{
+			name:      "suspended skips cycle",
+			suspended: true,
+		},
+		{
+			name: "suspension read error skips cycle",
+			err:  errors.New("api server unavailable"),
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			as := &fakeAlertSource{alerts: models.GettableAlerts{
+				makeAlert("HighCPU", "abcdef1234567890", time.Now().Add(-10*time.Minute)),
+			}}
+			rc := &fakeRunClient{}
+			ss := &fakeSuspensionSource{suspended: tt.suspended, err: tt.err}
+
+			a := &Adapter{
+				alerts:     as,
+				arClient:   rc,
+				suspension: ss,
+				cfg:        defaultTestConfig(),
+				namespace:  agenticrun.RunNamespace,
+				logger:     quietLogger(),
+			}
+
+			a.reconcile(context.Background())
+
+			if ss.calls != 1 {
+				t.Errorf("Suspended called %d times, want 1", ss.calls)
+			}
+			if as.getCalls != 0 {
+				t.Errorf("GetAlerts called %d times, want 0", as.getCalls)
+			}
+			if rc.listCalls != 0 {
+				t.Errorf("ListAgenticRuns called %d times, want 0", rc.listCalls)
+			}
+			if rc.createCalls != 0 {
+				t.Errorf("CreateAgenticRun called %d times, want 0", rc.createCalls)
+			}
+		})
 	}
 }

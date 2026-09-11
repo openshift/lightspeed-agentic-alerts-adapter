@@ -28,26 +28,33 @@ type AgenticRunClient interface {
 	CreateAgenticRun(ctx context.Context, p *agenticv1alpha1.AgenticRun) (bool, error)
 }
 
+// SuspensionSource retrieves the current adapter suspension state.
+type SuspensionSource interface {
+	Suspended(ctx context.Context) (bool, error)
+}
+
 // Adapter polls AlertManager for firing alerts and creates AgenticRun CRs,
 // applying stateless deduplication (pre-run delay, active-run check,
 // and post-run delay) on each cycle.
 type Adapter struct {
-	alerts    AlertSource
-	arClient  AgenticRunClient
-	cfg       config.Config
-	namespace string
-	logger    *slog.Logger
+	alerts     AlertSource
+	arClient   AgenticRunClient
+	suspension SuspensionSource
+	cfg        config.Config
+	namespace  string
+	logger     *slog.Logger
 }
 
 // New creates an Adapter with the given alert source, run client,
-// config, namespace, and logger.
-func New(alerts AlertSource, arClient AgenticRunClient, cfg config.Config, namespace string, logger *slog.Logger) *Adapter {
+// suspension source, config, namespace, and logger.
+func New(alerts AlertSource, arClient AgenticRunClient, suspension SuspensionSource, cfg config.Config, namespace string, logger *slog.Logger) *Adapter {
 	return &Adapter{
-		alerts:    alerts,
-		arClient:  arClient,
-		cfg:       cfg,
-		namespace: namespace,
-		logger:    logger,
+		alerts:     alerts,
+		arClient:   arClient,
+		suspension: suspension,
+		cfg:        cfg,
+		namespace:  namespace,
+		logger:     logger,
 	}
 }
 
@@ -78,6 +85,16 @@ func (a *Adapter) Run(ctx context.Context) error {
 
 func (a *Adapter) reconcile(ctx context.Context) {
 	a.logger.Debug("poll cycle start")
+
+	suspended, err := a.suspension.Suspended(ctx)
+	if err != nil {
+		a.logger.Error("failed to read AgenticOLSConfig suspension state", "error", err)
+		return
+	}
+	if suspended {
+		a.logger.Info("AgenticOLSConfig suspension is enabled; skipping poll cycle")
+		return
+	}
 
 	alerts, err := a.alerts.GetAlerts(ctx)
 	if err != nil {

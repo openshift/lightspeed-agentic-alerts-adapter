@@ -14,6 +14,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	"github.com/openshift/lightspeed-agentic-alerts-adapter/internal/adapter"
+	"github.com/openshift/lightspeed-agentic-alerts-adapter/internal/agenticolsconfig"
 	"github.com/openshift/lightspeed-agentic-alerts-adapter/internal/agenticrun"
 	"github.com/openshift/lightspeed-agentic-alerts-adapter/internal/alertmanager"
 	"github.com/openshift/lightspeed-agentic-alerts-adapter/internal/config"
@@ -54,8 +55,9 @@ func main() {
 	}
 
 	runClient := agenticrun.NewClient(k8sClient, namespace, logger)
+	suspensionClient := agenticolsconfig.NewClient(k8sClient)
 
-	a := adapter.New(amClient, runClient, cfg, namespace, logger)
+	a := adapter.New(amClient, runClient, suspensionClient, cfg, namespace, logger)
 	if err := a.Run(ctx); err != nil {
 		logger.Error("fatal error", "error", err)
 		os.Exit(1)
