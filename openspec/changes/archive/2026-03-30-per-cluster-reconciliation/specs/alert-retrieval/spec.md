@@ -11,8 +11,17 @@ The system SHALL retrieve active, non-silenced, non-inhibited alerts for every c
 - **WHEN** the configured remote Alertmanager endpoint cannot be reached
 - **THEN** the system SHALL return an error identifying remote Alertmanager retrieval
 
+#### Scenario: Remote Alertmanager returns an error response
+- **WHEN** the configured remote Alertmanager endpoint returns a non-2xx status
+- **THEN** the system SHALL return an error identifying the HTTP status without
+  including the response body
+
 ### Requirement: Authenticate remote Alertmanager requests with credential-Secret tokens
 The system SHALL authenticate every remote Alertmanager request with the bearer token supplied in the `token` data value of the spoke target's credential Secret.
+
+#### Scenario: Non-HTTPS Alertmanager endpoint
+- **WHEN** an Alertmanager endpoint URL does not use the `https` scheme
+- **THEN** the system SHALL reject the endpoint before sending a bearer token
 
 #### Scenario: Valid credential token
 - **WHEN** a configured spoke target's credential Secret provides a bearer token accepted by its remote Alertmanager

@@ -1,22 +1,23 @@
 ## Purpose
 
-Define independent reconciliation targets so every alert is evaluated and remediated only on the OpenShift cluster that produced it.
+Define independent reconciliation targets so alerts are evaluated per
+originating OpenShift cluster and eligible AgenticRuns are created on the hub.
 
-## ADDED Requirements
+## Requirements
 
 ### Requirement: Configure independent cluster targets
-The system SHALL always configure a local reconciliation target. It SHALL list cluster-scoped `hub.openshift.io/v1alpha1` `SpokeCluster` resources and configure one spoke target for every SpokeCluster bearing the `hub.openshift.io/alert-credential-secret` label. The label value SHALL name a credential Secret in the adapter namespace.
+The system SHALL configure a local reconciliation target unless `ALERTMANAGER_URL` is explicitly empty. When `--multicluster` is set, it SHALL list cluster-scoped `hub.openshift.io/v1alpha1` `SpokeCluster` resources and configure one spoke target for every SpokeCluster bearing the `hub.openshift.io/alert-credential-secret` label. The label value SHALL name a credential Secret in the adapter namespace.
 
 #### Scenario: Local-only deployment
-- **WHEN** no SpokeCluster bears the `hub.openshift.io/alert-credential-secret` label
+- **WHEN** `--multicluster` is not set
 - **THEN** the system SHALL reconcile only the local cluster using existing in-cluster behavior
 
-#### Scenario: SpokeCluster CRD is not installed
-- **WHEN** the cluster does not serve the `hub.openshift.io/v1alpha1` `SpokeCluster` resource
-- **THEN** the system SHALL reconcile only the local cluster using existing in-cluster behavior
+#### Scenario: SpokeCluster CRD is unavailable in multicluster mode
+- **WHEN** `--multicluster` is set and the cluster does not serve the `hub.openshift.io/v1alpha1` `SpokeCluster` resource
+- **THEN** the system SHALL fail startup with an error identifying SpokeCluster discovery
 
 #### Scenario: Multiple SpokeClusters are configured
-- **WHEN** multiple SpokeClusters bear the `hub.openshift.io/alert-credential-secret` label
+- **WHEN** `--multicluster` is set and multiple SpokeClusters bear the `hub.openshift.io/alert-credential-secret` label
 - **THEN** the system SHALL configure one independent spoke target for each labeled SpokeCluster
 
 #### Scenario: Spoke Secret cannot be loaded
@@ -53,8 +54,13 @@ The system SHALL continue reconciling healthy targets when alert retrieval, Agen
 - **THEN** the system SHALL skip the failed operation for that target and continue reconciling other targets
 
 ### Requirement: Create target-identified AgenticRuns on the hub
-The system SHALL create eligible AgenticRuns in the configured hub AgenticRun namespace. Every spoke-derived AgenticRun SHALL carry its SpokeCluster name as its target identity label.
+The system SHALL create eligible AgenticRuns in the configured hub AgenticRun
+namespace. Every spoke-derived AgenticRun SHALL carry a deterministic,
+label-safe target identity derived from its SpokeCluster name. The identity
+SHALL differ from the local target identity and SHALL not exceed the Kubernetes
+label-value length limit.
 
 #### Scenario: Eligible spoke alert
 - **WHEN** an alert retrieved from a spoke target passes receiver filtering and deduplication
-- **THEN** the AgenticRun SHALL be created on the hub cluster and labeled with that spoke target's SpokeCluster name
+- **THEN** the AgenticRun SHALL be created on the hub cluster and labeled with
+  that spoke target's target identity

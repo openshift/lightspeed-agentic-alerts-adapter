@@ -69,6 +69,14 @@ type requestData struct {
 // Different occurrences of the same alert (different startsAt) produce
 // distinct AgenticRun names, allowing re-creation after cooldown.
 func Build(a *models.GettableAlert, tools config.ToolsConfig, agent config.AgentConfig, ignoredLabels []string, targetNamespace string) (*agenticv1alpha1.AgenticRun, error) {
+	return BuildForTarget(a, tools, agent, ignoredLabels, targetNamespace, "", "")
+}
+
+// BuildForTarget constructs an AgenticRun with a name scoped to the label-safe
+// targetID. When targetCluster is non-empty, it sets Spec.TargetCluster to the
+// unmodified SpokeCluster name so the operator can locate that spoke's
+// kubeconfig Secret.
+func BuildForTarget(a *models.GettableAlert, tools config.ToolsConfig, agent config.AgentConfig, ignoredLabels []string, targetNamespace, targetID, targetCluster string) (*agenticv1alpha1.AgenticRun, error) {
 	if a.Fingerprint == nil {
 		return nil, fmt.Errorf("agenticrun: alert fingerprint is nil")
 	}
@@ -109,7 +117,7 @@ func Build(a *models.GettableAlert, tools config.ToolsConfig, agent config.Agent
 			Kind:       "AgenticRun",
 		},
 		ObjectMeta: metav1.ObjectMeta{
-			Name:        buildName(alertName, namespace, startsAt),
+			Name:        buildName(alertName, namespace, startsAt, targetID),
 			Namespace:   targetNamespace,
 			Labels:      buildLabels(alertName, severity, originalFP, stableFP),
 			Annotations: buildAnnotations(a),
@@ -120,6 +128,10 @@ func Build(a *models.GettableAlert, tools config.ToolsConfig, agent config.Agent
 			Execution:    execution,
 			Verification: verification,
 		},
+	}
+
+	if targetCluster != "" {
+		p.Spec.TargetCluster = targetCluster
 	}
 
 	if namespace != "" {
@@ -135,12 +147,13 @@ func Build(a *models.GettableAlert, tools config.ToolsConfig, agent config.Agent
 
 // buildName produces a deterministic DNS-compatible name: {alertname}-{namespace}-{startsAtHash}
 // or {alertname}-{startsAtHash} for cluster-scoped alerts.
-// The startsAt hash is an 8-character hex digest of the alert's start time,
-// ensuring each alert occurrence gets a unique AgenticRun name.
+// The startsAt hash is an 8-character hex digest of the alert's start time and
+// target identity, ensuring each alert occurrence gets a target-specific
+// AgenticRun name.
 // The name is capped at 63 characters because the agentic operator uses it as a
 // Kubernetes label value, which has a 63-byte limit.
-func buildName(alertName, namespace string, startsAt time.Time) string {
-	hash := startsAtHash(startsAt)
+func buildName(alertName, namespace string, startsAt time.Time, targetID string) string {
+	hash := startsAtHash(startsAt, targetID)
 
 	name := strings.ToLower(alertName)
 	name = invalidDNSChars.ReplaceAllString(name, "-")
@@ -166,8 +179,12 @@ func buildName(alertName, namespace string, startsAt time.Time) string {
 
 const startsAtHashLen = 8
 
-func startsAtHash(t time.Time) string {
-	h := sha256.Sum256([]byte(t.UTC().Format(time.RFC3339)))
+func startsAtHash(t time.Time, targetID string) string {
+	input := t.UTC().Format(time.RFC3339)
+	if targetID != "" {
+		input += "\x00" + targetID
+	}
+	h := sha256.Sum256([]byte(input))
 	return hex.EncodeToString(h[:])[:startsAtHashLen]
 }
 

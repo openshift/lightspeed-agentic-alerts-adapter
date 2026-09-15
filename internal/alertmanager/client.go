@@ -70,6 +70,9 @@ func New(cfg Config) (*Client, error) {
 	if u.Scheme == "" || u.Host == "" {
 		return nil, fmt.Errorf("alertmanager: invalid url %q: scheme and host are required", cfg.URL)
 	}
+	if u.Scheme != "https" {
+		return nil, fmt.Errorf("alertmanager: url scheme must be https")
+	}
 
 	defaultTransport := http.DefaultTransport.(*http.Transport).Clone()
 	if len(cfg.CABundle) > 0 {

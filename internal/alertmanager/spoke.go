@@ -6,10 +6,8 @@ import (
 	"crypto/x509"
 	"encoding/json"
 	"fmt"
-	"io"
 	"net/http"
 	"net/url"
-	"strings"
 	"sync"
 	"time"
 
@@ -80,7 +78,7 @@ func NewSpokeFromKubeconfig(cfg SpokeConfig) (*SpokeClient, error) {
 }
 
 // GetAlerts retrieves alerts from Alertmanager using its OpenShift Route.
-func (c *SpokeClient) GetAlerts(ctx context.Context) (models.GettableAlerts, error) {
+func (c *SpokeClient) GetAlerts(ctx context.Context) (alerts models.GettableAlerts, retErr error) {
 	route, err := c.routeClient.Resource(routeGVR).Namespace(monitoringNamespace).Get(ctx, alertmanagerRoute, metav1.GetOptions{})
 	if err != nil {
 		return nil, fmt.Errorf("alertmanager: getting route: %w", err)
@@ -134,18 +132,18 @@ func (c *SpokeClient) GetAlerts(ctx context.Context) (models.GettableAlerts, err
 		return nil, fmt.Errorf("alertmanager: querying route: %w", err)
 	}
 	defer func() {
-		_ = resp.Body.Close()
+		if err := resp.Body.Close(); err != nil && retErr == nil {
+			retErr = fmt.Errorf("alertmanager: closing route response: %w", err)
+		}
 	}()
 
 	if resp.StatusCode < 200 || resp.StatusCode > 299 {
-		body, _ := io.ReadAll(io.LimitReader(resp.Body, 4096))
 		if resp.StatusCode == http.StatusUnauthorized {
 			c.invalidateToken()
 		}
-		return nil, fmt.Errorf("alertmanager: route query failed: status %d: %s", resp.StatusCode, strings.TrimSpace(string(body)))
+		return nil, fmt.Errorf("alertmanager: route query failed: status %d", resp.StatusCode)
 	}
 
-	var alerts models.GettableAlerts
 	if err := json.NewDecoder(resp.Body).Decode(&alerts); err != nil {
 		return nil, fmt.Errorf("alertmanager: decoding route response: %w", err)
 	}

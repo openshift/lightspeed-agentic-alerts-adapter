@@ -19,13 +19,13 @@ See proposal.md for motivation. The adapter reconciles an alert source with the 
 
 ## Decisions
 
-### Discover spoke targets from SpokeClusters
+### Enable spoke target discovery explicitly
 
-At startup, list cluster-scoped `hub.openshift.io/v1alpha1` `SpokeCluster` resources. If the SpokeCluster CRD is not installed, retain only the local target. For every resource with the `hub.openshift.io/alert-credential-secret` label, construct one spoke target. The label value names the credential Secret in the adapter namespace.
+`--multicluster` enables spoke target discovery and defaults to false. Without the flag, the adapter builds only its local target and does not list SpokeClusters. With the flag, the adapter assumes the `hub.openshift.io/v1alpha1` SpokeCluster CRD is available, lists cluster-scoped SpokeClusters at startup, and constructs one spoke target for every resource bearing the `hub.openshift.io/alert-credential-secret` label. The label value names the credential Secret in the adapter namespace.
 
-This makes the hub's SpokeCluster inventory the source of spoke target configuration, rather than maintaining a separate comma-separated environment variable. The adapter uses an unstructured list because it does not otherwise depend on a Go type for the SpokeCluster API.
+This makes the hub's SpokeCluster inventory the source of spoke target configuration, rather than maintaining a separate comma-separated environment variable. The adapter uses the generated `github.com/openshift/lightspeed-hub/api/v1alpha1` API types for SpokeCluster discovery.
 
-Treating an absent CRD as no configured spokes preserves local-only deployments. Other SpokeCluster list failures remain startup errors because they can hide configured spoke targets.
+When multicluster mode is enabled, a SpokeCluster list failure, including an absent CRD, is a startup error because it can hide configured spoke targets. Local-only deployments preserve their behavior by leaving the flag unset.
 
 ### Read Alertmanager credentials from a hub Secret
 
@@ -47,14 +47,21 @@ Spoke targets and their Alertmanager clients are constructed during adapter star
 
 This retains the adapter's startup-based client construction and avoids adding resource watches or per-poll Secret reads.
 
+### Reconcile targets with bounded concurrency
+
+Each poll cycle performs the suspension check once, then reconciles independent targets concurrently. `MULTICLUSTER_MAX_CONCURRENT_TARGETS` controls the maximum concurrent target reconciliations when multicluster mode is enabled; it defaults to `4` and must be a positive integer. The setting is ignored when multicluster mode is disabled.
+
+The adapter starts no more than the configured number of target goroutines at a time and waits for all started target reconciliations before the poll cycle completes. This preserves the existing non-overlapping poll-cycle behavior. Alert processing within a target remains sequential so that its in-memory AgenticRun list continues to prevent duplicate creates during that target's reconciliation.
+
 ### Use the hub client for AgenticRun operations
 
-Every target uses the existing hub controller-runtime client and the hub `openshift-lightspeed` namespace to list and create AgenticRuns. A spoke target uses its SpokeCluster name as the AgenticRun target identity; hub list queries include that identity, so equivalent alerts from different targets do not suppress one another.
+Every target uses the existing hub controller-runtime client and the hub `openshift-lightspeed` namespace to list and create AgenticRuns. A spoke target uses a label-safe target identity derived from its SpokeCluster name; the full SpokeCluster name is retained for logging. Hub list queries include that identity, so equivalent alerts from different targets do not suppress one another.
 
 ## Risks / Trade-offs
 
-- [The SpokeCluster CRD is installed but the adapter cannot list SpokeClusters] → Require a ClusterRole that grants `list` on `hub.openshift.io/spokeclusters`.
+- [Multicluster mode is enabled but the adapter cannot list SpokeClusters] → Fail startup and require a ClusterRole that grants `list` on `hub.openshift.io/spokeclusters`.
 - [A referenced credential Secret is unavailable or malformed] → Log the SpokeCluster-specific initialization failure and continue with remaining targets.
 - [A remote Alertmanager certificate is not trusted by the credential Secret's CA bundle] → Provide the issuing CA in the Secret's `ca-bundle` value; TLS verification remains enabled.
 - [A credential token rotates or is revoked] → Restart the adapter after updating the credential Secret.
 - [SpokeCluster labels or credential Secrets change after startup] → Restart the adapter to rebuild spoke targets.
+- [Many spokes reconcile simultaneously] → Bound target concurrency with `MULTICLUSTER_MAX_CONCURRENT_TARGETS`; use a lower value when Alertmanager or Kubernetes API capacity requires it.

@@ -213,6 +213,36 @@ func TestBuildDeterministicNaming(t *testing.T) {
 	}
 }
 
+func TestBuildForTargetUsesDistinctName(t *testing.T) {
+	a := makeAlert("KubePodCrashLooping", "production", "abcdef1234567890", "critical")
+
+	local, err := Build(a, config.ToolsConfig{}, config.AgentConfig{}, nil, RunNamespace)
+	if err != nil {
+		t.Fatalf("building local run: %v", err)
+	}
+	east, err := BuildForTarget(a, config.ToolsConfig{}, config.AgentConfig{}, nil, RunNamespace, "spoke-east", "east")
+	if err != nil {
+		t.Fatalf("building east spoke run: %v", err)
+	}
+	west, err := BuildForTarget(a, config.ToolsConfig{}, config.AgentConfig{}, nil, RunNamespace, "spoke-west", "west")
+	if err != nil {
+		t.Fatalf("building west spoke run: %v", err)
+	}
+
+	if local.Name == east.Name || local.Name == west.Name || east.Name == west.Name {
+		t.Errorf("target-scoped names must differ: local=%q east=%q west=%q", local.Name, east.Name, west.Name)
+	}
+	if local.Spec.TargetCluster != "" {
+		t.Errorf("local targetCluster = %q, want empty", local.Spec.TargetCluster)
+	}
+	if east.Spec.TargetCluster != "east" {
+		t.Errorf("east targetCluster = %q, want %q", east.Spec.TargetCluster, "east")
+	}
+	if west.Spec.TargetCluster != "west" {
+		t.Errorf("west targetCluster = %q, want %q", west.Spec.TargetCluster, "west")
+	}
+}
+
 func TestBuildAnnotations(t *testing.T) {
 	t.Run("starts-at is RFC3339 UTC", func(t *testing.T) {
 		a := makeAlert("TestAlert", "ns", "abcdef12", "warning")
@@ -439,7 +469,7 @@ func TestNextAvailableName(t *testing.T) {
 
 func TestBuildName(t *testing.T) {
 	testTime := time.Date(2026, 1, 15, 10, 30, 0, 0, time.UTC)
-	hash := startsAtHash(testTime)
+	hash := startsAtHash(testTime, "")
 
 	tests := []struct {
 		name      string
@@ -495,13 +525,13 @@ func TestBuildName(t *testing.T) {
 			alertName: "KubePodCrashLooping",
 			namespace: "production",
 			startsAt:  testTime.Add(time.Hour),
-			expected:  "kubepodcrashlooping-production-" + startsAtHash(testTime.Add(time.Hour)),
+			expected:  "kubepodcrashlooping-production-" + startsAtHash(testTime.Add(time.Hour), ""),
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := buildName(tt.alertName, tt.namespace, tt.startsAt)
+			got := buildName(tt.alertName, tt.namespace, tt.startsAt, "")
 			if got != tt.expected {
 				t.Errorf("buildName() = %q, want %q", got, tt.expected)
 			}
