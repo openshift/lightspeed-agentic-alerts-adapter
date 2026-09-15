@@ -104,24 +104,33 @@ func newClientForConfig(cfg *rest.Config) (client.Client, error) {
 	return c, nil
 }
 
-// newTargets returns the local target followed by one target for each labeled
-// SpokeCluster whose credential Secret can be loaded and parsed. It returns an
-// error if the local Alertmanager client cannot be created or SpokeClusters
-// cannot be listed for a reason other than the SpokeCluster CRD being absent.
+// newTargets returns the local target (unless ALERTMANAGER_URL is explicitly
+// set to empty) followed by one target for each labeled SpokeCluster whose
+// credential Secret can be loaded and parsed. It returns an error if the local
+// Alertmanager client cannot be created, SpokeClusters cannot be listed for a
+// reason other than the SpokeCluster CRD being absent, or no targets are
+// configured.
 func newTargets(ctx context.Context, k8sClient client.Client, namespace string, logger *slog.Logger) ([]adapter.Target, error) {
-	local, err := alertmanager.New(alertmanager.Config{
-		URL: os.Getenv("ALERTMANAGER_URL"),
-	})
-	if err != nil {
-		return nil, fmt.Errorf("creating local alertmanager client: %w", err)
-	}
+	var targets []adapter.Target
 
-	targets := []adapter.Target{{
-		Name:      "local",
-		Alerts:    local,
-		ARClient:  agenticrun.NewClient(k8sClient, namespace, "local", logger),
-		Namespace: namespace,
-	}}
+	amURL, amURLSet := os.LookupEnv("ALERTMANAGER_URL")
+	if amURLSet && amURL == "" {
+		logger.Info("ALERTMANAGER_URL is explicitly empty; skipping local alertmanager target")
+	} else {
+		local, err := alertmanager.New(alertmanager.Config{
+			URL: amURL,
+		})
+		if err != nil {
+			return nil, fmt.Errorf("creating local alertmanager client: %w", err)
+		}
+
+		targets = append(targets, adapter.Target{
+			Name:      "local",
+			Alerts:    local,
+			ARClient:  agenticrun.NewClient(k8sClient, namespace, "local", logger),
+			Namespace: namespace,
+		})
+	}
 
 	var spokeClusters unstructured.UnstructuredList
 	spokeClusters.SetGroupVersionKind(spokeClusterListGVK)
@@ -171,6 +180,10 @@ func newTargets(ctx context.Context, k8sClient client.Client, namespace string, 
 			ARClient:  agenticrun.NewClient(k8sClient, namespace, spokeCluster.GetName(), targetLogger),
 			Namespace: namespace,
 		})
+	}
+
+	if len(targets) == 0 {
+		return nil, fmt.Errorf("no targets configured: set ALERTMANAGER_URL or configure spoke clusters")
 	}
 
 	return targets, nil
