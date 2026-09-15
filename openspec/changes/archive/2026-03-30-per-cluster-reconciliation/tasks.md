@@ -8,7 +8,7 @@
 ## 2. Spoke target construction
 
 - [x] 2.1 Build the local reconciliation target with the existing in-cluster Alertmanager and hub AgenticRun clients.
-- [x] 2.2 List cluster-scoped `hub.openshift.io/v1alpha1` `SpokeCluster` resources and construct one spoke target for every resource labeled `hub.openshift.io/alert-credential-secret`.
+- [x] 2.2 When `--multicluster` is set, list cluster-scoped `hub.openshift.io/v1alpha1` `SpokeCluster` resources with the generated Lightspeed Hub API types and construct one spoke target for every resource labeled `hub.openshift.io/alert-credential-secret`.
 - [x] 2.3 Read the named credential Secret in the adapter namespace and configure the spoke Alertmanager client from its `alertmanager-url`, `token`, and `ca-bundle` data values.
 - [x] 2.4 Log and omit a spoke target whose credential Secret cannot be read or lacks required data while continuing startup with healthy targets.
 
@@ -19,7 +19,13 @@
 
 ## 4. Validation
 
-- [ ] 4.1 Add target-construction tests covering SpokeCluster discovery, an absent SpokeCluster CRD, label filtering, valid credential Secrets including `ca-bundle`, and malformed or unavailable credential Secrets.
+- [x] 4.1 Add target-construction tests covering disabled multicluster discovery, enabled SpokeCluster discovery, label filtering, valid credential Secrets including `ca-bundle`, and malformed or unavailable credential Secrets.
 - [x] 4.2 Add Alertmanager-client tests covering bearer tokens supplied directly through client configuration and trusted/untrusted credential-Secret CA-bundle TLS certificates.
 - [x] 4.3 Run `make fmt` and `make test`; verify both commands complete successfully.
-- [x] 4.4 Deploy with a labeled SpokeCluster and verify an eligible remote alert creates a SpokeCluster-name-labeled AgenticRun in the hub `openshift-lightspeed` namespace.
+- [x] 4.4 Deploy with a labeled SpokeCluster and verify an eligible remote alert creates an AgenticRun labeled with the label-safe target identity derived from its SpokeCluster name in the hub `openshift-lightspeed` namespace.
+
+## 5. Bounded multicluster concurrency
+
+- [x] 5.1 Read `MULTICLUSTER_MAX_CONCURRENT_TARGETS` only when `--multicluster` is enabled; default it to `4` and reject non-positive or non-integer values at startup.
+- [x] 5.2 Reconcile targets with semaphore-bounded goroutines, waiting for every started target reconciliation before completing the poll cycle while retaining sequential alert processing within each target.
+- [x] 5.3 Add adapter tests that verify the configured target-concurrency limit is never exceeded and that the poll cycle waits for all target reconciliations.

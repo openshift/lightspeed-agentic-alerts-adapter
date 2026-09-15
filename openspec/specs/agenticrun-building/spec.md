@@ -17,6 +17,12 @@ The system SHALL convert an Alertmanager `GettableAlert` into an `AgenticRun` cu
 - **WHEN** the same alert is passed to Build twice
 - **THEN** both calls produce AgenticRuns with identical names, enabling Kubernetes 409 deduplication for the exact same alert instance
 
+#### Scenario: Target-specific names prevent cross-target collisions
+- **WHEN** equivalent alerts from two reconciliation targets are built with
+  different target identities
+- **THEN** their AgenticRuns SHALL have distinct deterministic names, while
+  repeated builds for either target identity SHALL retain the same name
+
 #### Scenario: Second alert for the same problem is deduplicated
 - **WHEN** two alerts differ only in ignored labels (e.g., different pod names) and an active AgenticRun already exists for the first alert
 - **THEN** the second alert produces the same `agentic.openshift.io/alert-group-id` label value, `hasActiveRun` matches the existing AgenticRun, and no new AgenticRun is created
@@ -128,6 +134,12 @@ The system SHALL list AgenticRun CRs filtered by the `agentic.openshift.io/sourc
 - **WHEN** ListAgenticRuns is called and AgenticRuns with the alertmanager source label exist
 - **THEN** the system returns the matching AgenticRuns with their status conditions
 
+#### Scenario: Legacy local AgenticRuns remain visible
+- **WHEN** ListAgenticRuns is called for the local target and an
+  Alertmanager-created AgenticRun has no target-identity label
+- **THEN** the system SHALL return that AgenticRun for local deduplication and
+  SHALL exclude AgenticRuns bearing another target identity
+
 #### Scenario: No agenticruns exist
 - **WHEN** ListAgenticRuns is called and no AgenticRuns with the alertmanager source label exist
 - **THEN** the system returns an empty list and no error
@@ -137,16 +149,20 @@ The system SHALL list AgenticRun CRs filtered by the `agentic.openshift.io/sourc
 - **THEN** ListAgenticRuns returns a wrapped error with context
 
 ### Requirement: Create AgenticRun resources in the cluster
-The system SHALL provide a Kubernetes client that creates AgenticRun CRs using controller-runtime with in-cluster config. The client SHALL return a boolean indicating whether the AgenticRun was created, and treat 409 AlreadyExists as a non-error.
+The system SHALL provide a hub Kubernetes client that lists and creates AgenticRun CRs in the hub cluster for every reconciliation target. The client SHALL filter listed Alertmanager-created AgenticRuns by reconciliation-target identity and SHALL return a boolean indicating whether the AgenticRun was created, treating 409 AlreadyExists as a non-error.
 
-#### Scenario: Successful creation
-- **WHEN** CreateAgenticRun is called with a valid AgenticRun
-- **THEN** the AgenticRun is created in the cluster, returns true and no error
+#### Scenario: Successful local creation
+- **WHEN** CreateAgenticRun is called with a valid AgenticRun for the local target
+- **THEN** the AgenticRun is created on the local cluster, returns true and no error
+
+#### Scenario: Successful spoke-derived creation
+- **WHEN** CreateAgenticRun is called with a valid AgenticRun for a spoke target
+- **THEN** the AgenticRun is created on the hub cluster with the spoke target identity label, returns true and no error
 
 #### Scenario: AgenticRun already exists
-- **WHEN** the Kubernetes API returns 409 AlreadyExists
+- **WHEN** the hub cluster's Kubernetes API returns 409 AlreadyExists
 - **THEN** CreateAgenticRun logs at Info level and returns false and no error
 
 #### Scenario: Creation failure
-- **WHEN** the Kubernetes API returns a non-409 error
-- **THEN** CreateAgenticRun returns false and a wrapped error with context
+- **WHEN** the hub cluster's Kubernetes API returns a non-409 error
+- **THEN** CreateAgenticRun returns false and a wrapped error identifying the hub operation

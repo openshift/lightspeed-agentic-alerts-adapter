@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"slices"
 	"strings"
+	"sync"
 	"time"
 
 	agenticv1alpha1 "github.com/openshift/lightspeed-agentic-operator/api/v1alpha1"
@@ -35,7 +36,11 @@ type SuspensionSource interface {
 
 // Target is one independently reconciled cluster.
 type Target struct {
-	Name      string
+	// Name is "local" for the hub target or the unmodified SpokeCluster name.
+	Name string
+	// ID is the label-safe target identity used to scope AgenticRun names and
+	// deduplication. It is empty for the local target.
+	ID        string
 	Alerts    AlertSource
 	ARClient  AgenticRunClient
 	Namespace string
@@ -45,19 +50,27 @@ type Target struct {
 // applying stateless deduplication (pre-run delay, active-run check,
 // and post-run delay) on each cycle.
 type Adapter struct {
-	targets    []Target
-	suspension SuspensionSource
-	cfg        config.Config
-	logger     *slog.Logger
+	targets              []Target
+	suspension           SuspensionSource
+	cfg                  config.Config
+	maxConcurrentTargets int
+	logger               *slog.Logger
 }
 
 // New creates an Adapter with the given reconciliation targets, config, and logger.
 func New(targets []Target, suspension SuspensionSource, cfg config.Config, logger *slog.Logger) *Adapter {
+	return NewWithMaxConcurrentTargets(targets, suspension, cfg, 1, logger)
+}
+
+// NewWithMaxConcurrentTargets creates an Adapter that reconciles no more than
+// maxConcurrentTargets targets simultaneously.
+func NewWithMaxConcurrentTargets(targets []Target, suspension SuspensionSource, cfg config.Config, maxConcurrentTargets int, logger *slog.Logger) *Adapter {
 	return &Adapter{
-		targets:    targets,
-		suspension: suspension,
-		cfg:        cfg,
-		logger:     logger,
+		targets:              targets,
+		suspension:           suspension,
+		cfg:                  cfg,
+		maxConcurrentTargets: maxConcurrentTargets,
+		logger:               logger,
 	}
 }
 
@@ -99,12 +112,33 @@ func (a *Adapter) reconcile(ctx context.Context) {
 		return
 	}
 
-	for _, target := range a.targets {
-		if ctx.Err() != nil {
-			return
-		}
-		a.reconcileTarget(ctx, target)
+	maxConcurrentTargets := a.maxConcurrentTargets
+	if maxConcurrentTargets < 1 {
+		maxConcurrentTargets = 1
 	}
+
+	semaphore := make(chan struct{}, maxConcurrentTargets)
+	var wg sync.WaitGroup
+
+	for _, target := range a.targets {
+		select {
+		case <-ctx.Done():
+			wg.Wait()
+			return
+		case semaphore <- struct{}{}:
+		}
+
+		wg.Add(1)
+		go func(target Target) {
+			defer wg.Done()
+			defer func() { <-semaphore }()
+			targetCtx, cancel := context.WithTimeout(ctx, a.cfg.PollInterval)
+			defer cancel()
+			a.reconcileTarget(targetCtx, target)
+		}(target)
+	}
+
+	wg.Wait()
 }
 
 func (a *Adapter) reconcileTarget(ctx context.Context, target Target) {
@@ -182,7 +216,11 @@ func (a *Adapter) reconcileTarget(ctx context.Context, target Target) {
 			continue
 		}
 
-		p, err := agenticrun.Build(alert, a.cfg.Tools, a.cfg.Agent, a.cfg.IgnoredLabels, target.Namespace)
+		targetCluster := ""
+		if target.ID != "" {
+			targetCluster = target.Name
+		}
+		p, err := agenticrun.BuildForTarget(alert, a.cfg.Tools, a.cfg.Agent, a.cfg.IgnoredLabels, target.Namespace, target.ID, targetCluster)
 		if err != nil {
 			a.logger.Error("failed to build run",
 				"target", target.Name,

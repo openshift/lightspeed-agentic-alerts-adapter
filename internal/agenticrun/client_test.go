@@ -3,6 +3,7 @@ package agenticrun
 import (
 	"io"
 	"log/slog"
+	"strings"
 	"testing"
 
 	agenticv1alpha1 "github.com/openshift/lightspeed-agentic-operator/api/v1alpha1"
@@ -97,6 +98,48 @@ func TestCreateAgenticRunAlreadyExists(t *testing.T) {
 	}
 }
 
+func TestSpokeTargetID(t *testing.T) {
+	longName := "a-very-long-spoke-cluster-name-that-exceeds-the-kubernetes-label-value-limit"
+
+	tests := []struct {
+		name  string
+		input string
+		want  string
+	}{
+		{
+			name:  "short name",
+			input: "prod-east",
+			want:  "spoke-prod-east",
+		},
+		{
+			name:  "local name remains distinct from local target",
+			input: "local",
+			want:  "spoke-local",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := SpokeTargetID(tt.input); got != tt.want {
+				t.Errorf("SpokeTargetID(%q) = %q, want %q", tt.input, got, tt.want)
+			}
+		})
+	}
+
+	t.Run("long name is bounded and deterministic", func(t *testing.T) {
+		got := SpokeTargetID(longName)
+		if len(got) != targetIDMaxLen {
+			t.Errorf("SpokeTargetID(%q) length = %d, want %d", longName, len(got), targetIDMaxLen)
+		}
+		if !strings.HasPrefix(got, spokeTargetPrefix+longName[:44]+"-") {
+			t.Errorf("SpokeTargetID(%q) = %q, want readable prefix", longName, got)
+		}
+		if got != SpokeTargetID(longName) {
+			t.Errorf("SpokeTargetID(%q) is not deterministic", longName)
+		}
+	})
+}
+
 func TestListAgenticRuns(t *testing.T) {
 	c := newTestClient(t)
 
@@ -142,6 +185,47 @@ func TestListAgenticRuns(t *testing.T) {
 	}
 	if runs[0].Name != "matching-abcdef12" {
 		t.Errorf("name = %q, want %q", runs[0].Name, "matching-abcdef12")
+	}
+}
+
+func TestListAgenticRunsIncludesLegacyLocalRuns(t *testing.T) {
+	c := newTestClient(t)
+
+	legacy := &agenticv1alpha1.AgenticRun{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "legacy-local-abcdef12",
+			Namespace: RunNamespace,
+			Labels: map[string]string{
+				LabelSource: sourceValue,
+			},
+		},
+	}
+	spoke := &agenticv1alpha1.AgenticRun{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "spoke-run-abcdef12",
+			Namespace: RunNamespace,
+			Labels: map[string]string{
+				LabelSource:       sourceValue,
+				LabelSourceTarget: "spoke-prod-east",
+			},
+		},
+	}
+	if err := c.Create(t.Context(), legacy); err != nil {
+		t.Fatalf("creating legacy local run: %v", err)
+	}
+	if err := c.Create(t.Context(), spoke); err != nil {
+		t.Fatalf("creating spoke run: %v", err)
+	}
+
+	runs, err := c.ListAgenticRuns(t.Context())
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(runs) != 1 {
+		t.Fatalf("got %d runs, want 1", len(runs))
+	}
+	if runs[0].Name != legacy.Name {
+		t.Errorf("name = %q, want %q", runs[0].Name, legacy.Name)
 	}
 }
 

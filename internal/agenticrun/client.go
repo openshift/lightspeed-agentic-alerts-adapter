@@ -2,6 +2,8 @@ package agenticrun
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
 	"log/slog"
 
@@ -10,7 +12,27 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
-const LabelSourceTarget = "agentic.openshift.io/alert-source-target"
+const (
+	LabelSourceTarget = "agentic.openshift.io/alert-source-target"
+	localTargetID     = "local"
+	spokeTargetPrefix = "spoke-"
+	targetHashLen     = 12
+	targetIDMaxLen    = 63
+)
+
+// SpokeTargetID returns a label-safe identity for a SpokeCluster target.
+// It prefixes short names to avoid colliding with the reserved local target ID.
+// Long names are truncated and suffixed with a hash of the full name.
+func SpokeTargetID(name string) string {
+	if len(spokeTargetPrefix)+len(name) <= targetIDMaxLen {
+		return spokeTargetPrefix + name
+	}
+
+	hash := sha256.Sum256([]byte(name))
+	suffix := hex.EncodeToString(hash[:])[:targetHashLen]
+	nameMaxLen := targetIDMaxLen - len(spokeTargetPrefix) - len(suffix) - 1
+	return spokeTargetPrefix + name[:nameMaxLen] + "-" + suffix
+}
 
 // Client creates and lists AgenticRun resources in the cluster.
 type Client struct {
@@ -25,17 +47,24 @@ func NewClient(c client.Client, namespace, target string, logger *slog.Logger) *
 	return &Client{Client: c, namespace: namespace, target: target, logger: logger}
 }
 
-// ListAgenticRuns returns all AgenticRuns created by this adapter, filtered by the
-// source=alertmanager and source target labels.
+// ListAgenticRuns returns all AgenticRuns created by this adapter for this
+// target. The local target also includes legacy runs without a target label.
 func (c *Client) ListAgenticRuns(ctx context.Context) ([]agenticv1alpha1.AgenticRun, error) {
 	var list agenticv1alpha1.AgenticRunList
 	if err := c.List(ctx, &list, client.InNamespace(c.namespace), client.MatchingLabels{
-		LabelSource:       sourceValue,
-		LabelSourceTarget: c.target,
+		LabelSource: sourceValue,
 	}); err != nil {
 		return nil, fmt.Errorf("agenticrun: listing runs: %w", err)
 	}
-	return list.Items, nil
+
+	runs := make([]agenticv1alpha1.AgenticRun, 0, len(list.Items))
+	for i := range list.Items {
+		target, labeled := list.Items[i].Labels[LabelSourceTarget]
+		if target == c.target || (c.target == localTargetID && !labeled) {
+			runs = append(runs, list.Items[i])
+		}
+	}
+	return runs, nil
 }
 
 // CreateAgenticRun creates an AgenticRun resource in the cluster.

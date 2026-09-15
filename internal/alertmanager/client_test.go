@@ -322,6 +322,20 @@ func TestNewInvalidURL(t *testing.T) {
 	}
 }
 
+func TestNewRejectsNonHTTPSURL(t *testing.T) {
+	_, err := New(Config{
+		URL:       "http://alertmanager.example.com",
+		TokenPath: "/some/path",
+		CAPath:    "/some/path",
+	})
+	if err == nil {
+		t.Fatal("expected error for non-HTTPS URL, got nil")
+	}
+	if !strings.Contains(err.Error(), "scheme must be https") {
+		t.Errorf("error %q does not require HTTPS", err.Error())
+	}
+}
+
 func TestNewMalformedURL(t *testing.T) {
 	tests := []struct {
 		name string

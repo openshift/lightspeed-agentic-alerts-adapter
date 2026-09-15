@@ -3,11 +3,11 @@ Continuously poll AlertManager for firing alerts and create AgenticRun CRs for n
 
 ## Requirements
 ### Requirement: Poll AlertManager on a fixed interval
-The system SHALL read operational parameters (`pollInterval`, `preRunDelay`, `postRunDelay`) from the `ConfigSource` at the start of each reconcile cycle and use them for that cycle's filtering and deduplication rules. The default poll interval is 30 seconds. When the loaded `pollInterval` differs from the current ticker interval, the system SHALL reset the ticker to the new interval. The filter order SHALL be: receiver allowlist -> pre-run delay -> active AgenticRun -> post-run delay. At the start of each reconcile cycle, the system SHALL read the cluster-scoped `AgenticOLSConfig` singleton named `cluster`; when `spec.suspended` is true, the system SHALL skip that reconcile cycle before polling AlertManager, listing existing AgenticRuns, or creating AgenticRuns. When the `AgenticOLSConfig` CRD or singleton object is absent, the system SHALL behave as if suspended mode is disabled.
+The system SHALL read operational parameters (`pollInterval`, `preRunDelay`, `postRunDelay`) from the `ConfigSource` at the start of each reconcile cycle and use them for that cycle's filtering and deduplication rules. The default poll interval is 30 seconds. When the loaded `pollInterval` differs from the current ticker interval, the system SHALL reset the ticker to the new interval. For each configured reconciliation target, the filter order SHALL be: receiver allowlist -> pre-run delay -> active AgenticRun -> post-run delay. At the start of each reconcile cycle, the system SHALL read the cluster-scoped `AgenticOLSConfig` singleton named `cluster`; when `spec.suspended` is true, the system SHALL skip that reconcile cycle before polling AlertManager, listing existing AgenticRuns, or creating AgenticRuns. When the `AgenticOLSConfig` CRD or singleton object is absent, the system SHALL behave as if suspended mode is disabled.
 
 #### Scenario: Normal poll cycle
 - **WHEN** suspended mode is disabled and the poll interval elapses
-- **THEN** the system fetches alerts from AlertManager, lists existing AgenticRuns, applies receiver filtering then dedup rules, and creates AgenticRuns for qualifying alerts
+- **THEN** the system fetches alerts from every configured reconciliation target, lists hub AgenticRuns matching that target's identity, applies receiver filtering then dedup rules independently for that target, and creates target-identified AgenticRuns on the hub for qualifying alerts
 
 #### Scenario: Configuration loaded each cycle
 - **WHEN** suspended mode is disabled and a reconcile cycle begins
@@ -38,12 +38,42 @@ The system SHALL read operational parameters (`pollInterval`, `preRunDelay`, `po
 - **THEN** the system does not list existing AgenticRuns and does not create any AgenticRun
 
 #### Scenario: AlertManager unreachable during poll
-- **WHEN** suspended mode is disabled and the AlertManager API returns an error during a poll cycle
-- **THEN** the system logs the error and skips the cycle; the next poll retries
+- **WHEN** the AlertManager API returns an error for one target during a poll cycle
+- **THEN** the system logs the target-specific error, skips that target's reconciliation, and continues the cycle for the remaining targets
 
 #### Scenario: Kubernetes API unreachable during poll
-- **WHEN** suspended mode is disabled and the Kubernetes API returns an error during AgenticRun listing or creation
-- **THEN** the system logs the error and skips the cycle; the next poll retries
+- **WHEN** the hub Kubernetes API returns an error during AgenticRun listing or creation for one target
+- **THEN** the system logs the target-specific hub operation error, skips the failed operation for that target, and continues the cycle for the remaining targets
+
+### Requirement: Bound concurrent target reconciliation
+When `--multicluster` is set, the system SHALL reconcile independent targets concurrently while limiting the number of simultaneous target reconciliations to `MULTICLUSTER_MAX_CONCURRENT_TARGETS`. The default limit SHALL be `4`. The value SHALL be a positive integer. Alert processing within a target SHALL remain sequential, and the system SHALL wait for all started target reconciliations before beginning another poll cycle.
+
+#### Scenario: Default multicluster concurrency
+- **WHEN** `--multicluster` is set and `MULTICLUSTER_MAX_CONCURRENT_TARGETS` is unset
+- **THEN** the system SHALL reconcile at most four targets simultaneously
+
+#### Scenario: Configured multicluster concurrency
+- **WHEN** `--multicluster` is set and `MULTICLUSTER_MAX_CONCURRENT_TARGETS` contains a positive integer
+- **THEN** the system SHALL reconcile at most that number of targets simultaneously
+
+#### Scenario: Invalid multicluster concurrency
+- **WHEN** `--multicluster` is set and `MULTICLUSTER_MAX_CONCURRENT_TARGETS` is absent of a valid positive integer
+- **THEN** the system SHALL fail startup with an error identifying `MULTICLUSTER_MAX_CONCURRENT_TARGETS`
+
+#### Scenario: Local-only deployment
+- **WHEN** `--multicluster` is not set
+- **THEN** the system SHALL reconcile the local target sequentially and SHALL ignore `MULTICLUSTER_MAX_CONCURRENT_TARGETS`
+
+### Requirement: Bound individual target reconciliation time
+The system SHALL apply the configured `pollInterval` as a deadline to every
+target reconciliation. Alertmanager and hub Kubernetes operations for a target
+SHALL use that deadline while preserving cancellation from the parent context.
+
+#### Scenario: Target operation does not respond
+- **WHEN** an Alertmanager or hub Kubernetes operation for a target does not
+  complete within `pollInterval`
+- **THEN** the target reconciliation context SHALL be cancelled and the
+  remaining targets SHALL continue to be reconciled
 
 ### Requirement: Skip transient alerts (pre-run delay)
 The system SHALL not create an AgenticRun for an alert that has been firing for less than the configured `preRunDelay`, to filter out transient alerts that resolve on their own. When `preRunDelay` is 0, this check is a no-op and all alerts pass.
