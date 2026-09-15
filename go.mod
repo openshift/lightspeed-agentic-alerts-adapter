@@ -5,7 +5,7 @@ go 1.26.0
 require (
 	github.com/go-openapi/runtime v0.33.2
 	github.com/go-openapi/strfmt v0.27.2
-	github.com/onsi/ginkgo/v2 v2.32.1
+	github.com/onsi/ginkgo/v2 v2.32.2
 	github.com/onsi/gomega v1.43.0
 	github.com/openshift/lightspeed-agentic-operator/api v0.0.0-20260710093841-6e7c2bec3cc5
 	github.com/prometheus/alertmanager v0.34.0
