@@ -7,123 +7,22 @@ import (
 	"crypto/rand"
 	"crypto/x509"
 	"encoding/pem"
+	"errors"
 	"io"
 	"log/slog"
 	"math/big"
 	"os"
 	"strings"
 	"testing"
+	"time"
 
+	"github.com/openshift/lightspeed-agentic-alerts-adapter/internal/multicluster"
 	hubv1alpha1 "github.com/openshift/lightspeed-hub/api/v1alpha1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 )
-
-func TestAlertCredentialsFromSecret(t *testing.T) {
-	tests := []struct {
-		name      string
-		data      map[string][]byte
-		wantURL   string
-		wantToken string
-		wantCA    string
-		errText   string
-	}{
-		{
-			name: "valid credentials",
-			data: map[string][]byte{
-				alertmanagerURLKey: []byte("https://alertmanager.example.com"),
-				tokenKey:           []byte("spoke-token"),
-				caBundleKey:        []byte("test-ca-bundle"),
-			},
-			wantURL:   "https://alertmanager.example.com",
-			wantToken: "spoke-token",
-			wantCA:    "test-ca-bundle",
-		},
-		{
-			name: "missing alertmanager url",
-			data: map[string][]byte{
-				tokenKey:    []byte("spoke-token"),
-				caBundleKey: []byte("test-ca-bundle"),
-			},
-			errText: alertmanagerURLKey,
-		},
-		{
-			name: "empty alertmanager url",
-			data: map[string][]byte{
-				alertmanagerURLKey: []byte{},
-				tokenKey:           []byte("spoke-token"),
-				caBundleKey:        []byte("test-ca-bundle"),
-			},
-			errText: alertmanagerURLKey,
-		},
-		{
-			name: "missing token",
-			data: map[string][]byte{
-				alertmanagerURLKey: []byte("https://alertmanager.example.com"),
-				caBundleKey:        []byte("test-ca-bundle"),
-			},
-			errText: tokenKey,
-		},
-		{
-			name: "empty token",
-			data: map[string][]byte{
-				alertmanagerURLKey: []byte("https://alertmanager.example.com"),
-				tokenKey:           []byte{},
-				caBundleKey:        []byte("test-ca-bundle"),
-			},
-			errText: tokenKey,
-		},
-		{
-			name: "missing ca bundle",
-			data: map[string][]byte{
-				alertmanagerURLKey: []byte("https://alertmanager.example.com"),
-				tokenKey:           []byte("spoke-token"),
-			},
-			errText: caBundleKey,
-		},
-		{
-			name: "empty ca bundle",
-			data: map[string][]byte{
-				alertmanagerURLKey: []byte("https://alertmanager.example.com"),
-				tokenKey:           []byte("spoke-token"),
-				caBundleKey:        []byte{},
-			},
-			errText: caBundleKey,
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			url, token, caBundle, err := alertCredentialsFromSecret(&corev1.Secret{
-				Data: tt.data,
-			})
-
-			if tt.errText != "" {
-				if err == nil {
-					t.Fatal("expected error, got nil")
-				}
-				if !strings.Contains(err.Error(), tt.errText) {
-					t.Errorf("error = %q, want it to contain %q", err, tt.errText)
-				}
-				return
-			}
-			if err != nil {
-				t.Fatalf("unexpected error: %v", err)
-			}
-			if url != tt.wantURL {
-				t.Errorf("url = %q, want %q", url, tt.wantURL)
-			}
-			if token != tt.wantToken {
-				t.Errorf("token = %q, want %q", token, tt.wantToken)
-			}
-			if got := string(caBundle); got != tt.wantCA {
-				t.Errorf("caBundle = %q, want %q", got, tt.wantCA)
-			}
-		})
-	}
-}
 
 func testCABundle(t *testing.T) []byte {
 	t.Helper()
@@ -187,7 +86,7 @@ func TestNewTargetsMulticluster(t *testing.T) {
 				ObjectMeta: metav1.ObjectMeta{
 					Name: "spoke",
 					Labels: map[string]string{
-						alertCredentialSecretLabel: "spoke-alert-credentials",
+						multicluster.CredentialSecretLabel: "spoke-alert-credentials",
 					},
 				},
 			}
@@ -201,9 +100,9 @@ func TestNewTargetsMulticluster(t *testing.T) {
 							Namespace: "test-namespace",
 						},
 						Data: map[string][]byte{
-							alertmanagerURLKey: []byte("https://alertmanager.spoke"),
-							tokenKey:           []byte("spoke-token"),
-							caBundleKey:        testCABundle(t),
+							"alertmanager-url": []byte("https://alertmanager.spoke"),
+							"token":            []byte("spoke-token"),
+							"ca-bundle":        testCABundle(t),
 						},
 					},
 				).
@@ -259,7 +158,7 @@ func TestNewTargetsSkipsUnlabeledAndInvalidSpokes(t *testing.T) {
 				ObjectMeta: metav1.ObjectMeta{
 					Name: "valid",
 					Labels: map[string]string{
-						alertCredentialSecretLabel: "valid-credentials",
+						multicluster.CredentialSecretLabel: "valid-credentials",
 					},
 				},
 			},
@@ -270,7 +169,7 @@ func TestNewTargetsSkipsUnlabeledAndInvalidSpokes(t *testing.T) {
 				ObjectMeta: metav1.ObjectMeta{
 					Name: "malformed",
 					Labels: map[string]string{
-						alertCredentialSecretLabel: "malformed-credentials",
+						multicluster.CredentialSecretLabel: "malformed-credentials",
 					},
 				},
 			},
@@ -278,7 +177,7 @@ func TestNewTargetsSkipsUnlabeledAndInvalidSpokes(t *testing.T) {
 				ObjectMeta: metav1.ObjectMeta{
 					Name: "unavailable",
 					Labels: map[string]string{
-						alertCredentialSecretLabel: "unavailable-credentials",
+						multicluster.CredentialSecretLabel: "unavailable-credentials",
 					},
 				},
 			},
@@ -288,9 +187,9 @@ func TestNewTargetsSkipsUnlabeledAndInvalidSpokes(t *testing.T) {
 					Namespace: "test-namespace",
 				},
 				Data: map[string][]byte{
-					alertmanagerURLKey: []byte("https://alertmanager.valid"),
-					tokenKey:           []byte("valid-token"),
-					caBundleKey:        testCABundle(t),
+					"alertmanager-url": []byte("https://alertmanager.valid"),
+					"token":            []byte("valid-token"),
+					"ca-bundle":        testCABundle(t),
 				},
 			},
 			&corev1.Secret{
@@ -299,8 +198,8 @@ func TestNewTargetsSkipsUnlabeledAndInvalidSpokes(t *testing.T) {
 					Namespace: "test-namespace",
 				},
 				Data: map[string][]byte{
-					alertmanagerURLKey: []byte("https://alertmanager.malformed"),
-					caBundleKey:        testCABundle(t),
+					"alertmanager-url": []byte("https://alertmanager.malformed"),
+					"ca-bundle":        testCABundle(t),
 				},
 			},
 		).
@@ -390,6 +289,76 @@ func TestMulticlusterMaxConcurrentTargets(t *testing.T) {
 			}
 			if got != tt.want {
 				t.Errorf("multiclusterMaxConcurrentTargets() = %d, want %d", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestRunControllerManager(t *testing.T) {
+	tests := []struct {
+		name        string
+		cancelFirst bool
+		startErr    error
+		wantErr     string
+	}{
+		{
+			name:     "returns manager error and stops polling",
+			startErr: errors.New("manager failed"),
+			wantErr:  "manager failed",
+		},
+		{
+			name:    "converts unexpected nil return to an error",
+			wantErr: "stopped unexpectedly",
+		},
+		{
+			name:        "does not stop polling after context cancellation",
+			cancelFirst: true,
+			startErr:    errors.New("context canceled"),
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ctx, cancel := context.WithCancel(t.Context())
+			t.Cleanup(cancel)
+			if tt.cancelFirst {
+				cancel()
+			}
+
+			stopped := make(chan struct{})
+			started := make(chan struct{})
+			errCh := runControllerManager(ctx, func() { close(stopped) }, func(context.Context) error {
+				close(started)
+				return tt.startErr
+			})
+			<-started
+
+			if tt.wantErr != "" {
+				select {
+				case err := <-errCh:
+					if !strings.Contains(err.Error(), tt.wantErr) {
+						t.Errorf("manager error = %q, want it to contain %q", err, tt.wantErr)
+					}
+				case <-time.After(time.Second):
+					t.Fatal("timed out waiting for manager error")
+				}
+				select {
+				case <-stopped:
+				case <-time.After(time.Second):
+					t.Fatal("poll loop was not stopped")
+				}
+				return
+			}
+
+			select {
+			case err := <-errCh:
+				t.Errorf("unexpected manager error: %v", err)
+			default:
+			}
+			select {
+			case <-stopped:
+				t.Error("poll loop was stopped after context cancellation")
+			default:
 			}
 		})
 	}

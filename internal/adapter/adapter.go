@@ -46,11 +46,24 @@ type Target struct {
 	Namespace string
 }
 
+// TargetSource returns a point-in-time snapshot of reconciliation targets.
+type TargetSource interface {
+	Targets() []Target
+}
+
+// StaticTargetSource returns a fixed copy of its configured targets.
+type StaticTargetSource []Target
+
+// Targets returns a copy of the configured targets.
+func (s StaticTargetSource) Targets() []Target {
+	return slices.Clone(s)
+}
+
 // Adapter polls AlertManager for firing alerts and creates AgenticRun CRs,
 // applying stateless deduplication (pre-run delay, active-run check,
 // and post-run delay) on each cycle.
 type Adapter struct {
-	targets              []Target
+	targets              TargetSource
 	suspension           SuspensionSource
 	cfg                  config.Config
 	maxConcurrentTargets int
@@ -58,13 +71,13 @@ type Adapter struct {
 }
 
 // New creates an Adapter with the given reconciliation targets, config, and logger.
-func New(targets []Target, suspension SuspensionSource, cfg config.Config, logger *slog.Logger) *Adapter {
+func New(targets TargetSource, suspension SuspensionSource, cfg config.Config, logger *slog.Logger) *Adapter {
 	return NewWithMaxConcurrentTargets(targets, suspension, cfg, 1, logger)
 }
 
 // NewWithMaxConcurrentTargets creates an Adapter that reconciles no more than
 // maxConcurrentTargets targets simultaneously.
-func NewWithMaxConcurrentTargets(targets []Target, suspension SuspensionSource, cfg config.Config, maxConcurrentTargets int, logger *slog.Logger) *Adapter {
+func NewWithMaxConcurrentTargets(targets TargetSource, suspension SuspensionSource, cfg config.Config, maxConcurrentTargets int, logger *slog.Logger) *Adapter {
 	return &Adapter{
 		targets:              targets,
 		suspension:           suspension,
@@ -117,10 +130,11 @@ func (a *Adapter) reconcile(ctx context.Context) {
 		maxConcurrentTargets = 1
 	}
 
+	targets := a.targets.Targets()
 	semaphore := make(chan struct{}, maxConcurrentTargets)
 	var wg sync.WaitGroup
 
-	for _, target := range a.targets {
+	for _, target := range targets {
 		select {
 		case <-ctx.Done():
 			wg.Wait()
