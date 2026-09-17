@@ -2,12 +2,7 @@ package alertmanager
 
 import (
 	"context"
-	"crypto/tls"
-	"crypto/x509"
-	"encoding/json"
 	"fmt"
-	"net/http"
-	"net/url"
 	"sync"
 	"time"
 
@@ -78,7 +73,7 @@ func NewSpokeFromKubeconfig(cfg SpokeConfig) (*SpokeClient, error) {
 }
 
 // GetAlerts retrieves alerts from Alertmanager using its OpenShift Route.
-func (c *SpokeClient) GetAlerts(ctx context.Context) (alerts models.GettableAlerts, retErr error) {
+func (c *SpokeClient) GetAlerts(ctx context.Context) (models.GettableAlerts, error) {
 	route, err := c.routeClient.Resource(routeGVR).Namespace(monitoringNamespace).Get(ctx, alertmanagerRoute, metav1.GetOptions{})
 	if err != nil {
 		return nil, fmt.Errorf("alertmanager: getting route: %w", err)
@@ -97,55 +92,27 @@ func (c *SpokeClient) GetAlerts(ctx context.Context) (alerts models.GettableAler
 	if err != nil {
 		return nil, fmt.Errorf("alertmanager: getting ingress ca bundle: %w", err)
 	}
-	caPool := x509.NewCertPool()
-	if !caPool.AppendCertsFromPEM([]byte(caConfigMap.Data[ingressCAKey])) {
+	caBundle, found := caConfigMap.Data[ingressCAKey]
+	if !found || caBundle == "" {
 		return nil, fmt.Errorf("alertmanager: no valid certificates in ingress ca bundle")
 	}
 
-	u, err := url.Parse("https://" + host + "/api/v2/alerts")
+	alertClient, err := New(Config{
+		URL:      "https://" + host,
+		CABundle: []byte(caBundle),
+		CASource: fmt.Sprintf("ConfigMap %s/%s key %s", ingressCANamespace, ingressCAConfigMap, ingressCAKey),
+		Token:    token,
+	})
 	if err != nil {
-		return nil, fmt.Errorf("alertmanager: parsing route url: %w", err)
+		return nil, err
 	}
-	q := u.Query()
-	q.Set("active", "true")
-	q.Set("silenced", "false")
-	q.Set("inhibited", "false")
-	u.RawQuery = q.Encode()
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, u.String(), nil)
+	alerts, err := alertClient.GetAlerts(ctx)
 	if err != nil {
-		return nil, fmt.Errorf("alertmanager: creating route request: %w", err)
-	}
-	req.Header.Set("Accept", "application/json")
-	req.Header.Set("Authorization", "Bearer "+token)
-
-	httpClient := &http.Client{
-		Transport: &http.Transport{
-			TLSClientConfig: &tls.Config{
-				RootCAs:    caPool,
-				MinVersion: tls.VersionTLS12,
-			},
-		},
-	}
-	resp, err := httpClient.Do(req)
-	if err != nil {
-		return nil, fmt.Errorf("alertmanager: querying route: %w", err)
-	}
-	defer func() {
-		if err := resp.Body.Close(); err != nil && retErr == nil {
-			retErr = fmt.Errorf("alertmanager: closing route response: %w", err)
-		}
-	}()
-
-	if resp.StatusCode < 200 || resp.StatusCode > 299 {
-		if resp.StatusCode == http.StatusUnauthorized {
+		if isUnauthorized(err) {
 			c.invalidateToken()
 		}
-		return nil, fmt.Errorf("alertmanager: route query failed: status %d", resp.StatusCode)
-	}
-
-	if err := json.NewDecoder(resp.Body).Decode(&alerts); err != nil {
-		return nil, fmt.Errorf("alertmanager: decoding route response: %w", err)
+		return nil, err
 	}
 
 	return alerts, nil
