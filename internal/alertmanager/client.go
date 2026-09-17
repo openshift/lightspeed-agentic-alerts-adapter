@@ -5,6 +5,7 @@ import (
 	"context"
 	"crypto/tls"
 	"crypto/x509"
+	"errors"
 	"fmt"
 	"net/http"
 	"net/url"
@@ -55,6 +56,11 @@ type Client struct {
 	api       *amclient.AlertmanagerAPI
 	token     string
 	tokenPath string
+}
+
+func isUnauthorized(err error) bool {
+	var apiErr *runtime.APIError
+	return errors.As(err, &apiErr) && apiErr.Code == http.StatusUnauthorized
 }
 
 // New creates a Client configured for the given Alertmanager endpoint. It
