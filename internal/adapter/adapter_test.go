@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"slices"
 	"strings"
 	"sync"
 	"testing"
@@ -134,7 +135,7 @@ func defaultTestConfig() config.Config {
 
 func testAdapter(as AlertSource, rc AgenticRunClient, cfg config.Config) *Adapter {
 	return &Adapter{
-		targets: []Target{{
+		targets: StaticTargetSource{{
 			Name:      "local",
 			Alerts:    as,
 			ARClient:  rc,
@@ -143,6 +144,45 @@ func testAdapter(as AlertSource, rc AgenticRunClient, cfg config.Config) *Adapte
 		suspension: &fakeSuspensionSource{},
 		cfg:        cfg,
 		logger:     quietLogger(),
+	}
+}
+
+type fakeTargetSource struct {
+	targets []Target
+}
+
+func (s *fakeTargetSource) Targets() []Target {
+	return slices.Clone(s.targets)
+}
+
+func TestReconcileUsesTargetSnapshot(t *testing.T) {
+	now := time.Now()
+	localRuns := &fakeRunClient{}
+	spokeRuns := &fakeRunClient{}
+	source := &fakeTargetSource{
+		targets: []Target{{
+			Name:      "local",
+			Alerts:    &fakeAlertSource{alerts: models.GettableAlerts{makeAlert("LocalAlert", "local", now.Add(-10*time.Minute))}},
+			ARClient:  localRuns,
+			Namespace: agenticrun.RunNamespace,
+		}},
+	}
+	a := New(source, &fakeSuspensionSource{}, defaultTestConfig(), quietLogger())
+
+	a.reconcile(t.Context())
+	source.targets = []Target{{
+		Name:      "spoke",
+		Alerts:    &fakeAlertSource{alerts: models.GettableAlerts{makeAlert("SpokeAlert", "spoke", now.Add(-10*time.Minute))}},
+		ARClient:  spokeRuns,
+		Namespace: agenticrun.RunNamespace,
+	}}
+	a.reconcile(t.Context())
+
+	if localRuns.createCalls != 1 {
+		t.Errorf("local CreateAgenticRun calls = %d, want 1", localRuns.createCalls)
+	}
+	if spokeRuns.createCalls != 1 {
+		t.Errorf("spoke CreateAgenticRun calls = %d, want 1", spokeRuns.createCalls)
 	}
 }
 
@@ -212,7 +252,7 @@ func TestReconcileBoundsTargetConcurrency(t *testing.T) {
 		}
 	}
 	a := NewWithMaxConcurrentTargets(
-		targets,
+		StaticTargetSource(targets),
 		&fakeSuspensionSource{},
 		defaultTestConfig(),
 		2,
@@ -821,7 +861,7 @@ func TestReconcileTargets(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			a := &Adapter{
-				targets:    tt.targets,
+				targets:    StaticTargetSource(tt.targets),
 				suspension: &fakeSuspensionSource{},
 				cfg:        defaultTestConfig(),
 				logger:     quietLogger(),
@@ -854,7 +894,7 @@ func TestReconcileTargetCluster(t *testing.T) {
 	localRuns := &fakeRunClient{}
 	spokeRuns := &fakeRunClient{}
 	a := &Adapter{
-		targets: []Target{
+		targets: StaticTargetSource{
 			{Name: "local", Alerts: &fakeAlertSource{alerts: models.GettableAlerts{alert}}, ARClient: localRuns, Namespace: agenticrun.RunNamespace},
 			{Name: "spoke-1", ID: "spoke-spoke-1", Alerts: &fakeAlertSource{alerts: models.GettableAlerts{alert}}, ARClient: spokeRuns, Namespace: agenticrun.RunNamespace},
 		},
@@ -923,7 +963,7 @@ func TestReconcileSkipsCycleForSuspensionState(t *testing.T) {
 			ss := &fakeSuspensionSource{suspended: tt.suspended, err: tt.err}
 
 			a := &Adapter{
-				targets: []Target{{
+				targets: StaticTargetSource{{
 					Name:      "local",
 					Alerts:    as,
 					ARClient:  rc,

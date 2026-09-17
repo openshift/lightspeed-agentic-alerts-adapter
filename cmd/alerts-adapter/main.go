@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"flag"
 	"fmt"
 	"log/slog"
@@ -10,27 +11,25 @@ import (
 	"strconv"
 	"syscall"
 
+	"github.com/go-logr/logr"
 	agenticv1alpha1 "github.com/openshift/lightspeed-agentic-operator/api/v1alpha1"
 	hubv1alpha1 "github.com/openshift/lightspeed-hub/api/v1alpha1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/runtime"
-	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/rest"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
 
 	"github.com/openshift/lightspeed-agentic-alerts-adapter/internal/adapter"
 	"github.com/openshift/lightspeed-agentic-alerts-adapter/internal/agenticolsconfig"
 	"github.com/openshift/lightspeed-agentic-alerts-adapter/internal/agenticrun"
 	"github.com/openshift/lightspeed-agentic-alerts-adapter/internal/alertmanager"
 	"github.com/openshift/lightspeed-agentic-alerts-adapter/internal/config"
+	"github.com/openshift/lightspeed-agentic-alerts-adapter/internal/multicluster"
 )
 
 const (
-	alertCredentialSecretLabel              = "hub.openshift.io/alert-credential-secret"
-	alertmanagerURLKey                      = "alertmanager-url"
-	tokenKey                                = "token"
-	caBundleKey                             = "ca-bundle"
 	maxConcurrentTargetsEnv                 = "MULTICLUSTER_MAX_CONCURRENT_TARGETS"
 	defaultMulticlusterMaxConcurrentTargets = 4
 )
@@ -43,6 +42,7 @@ func main() {
 		Level: slog.LevelInfo,
 	}))
 	slog.SetDefault(logger)
+	ctrl.SetLogger(logr.FromSlogHandler(logger.Handler()))
 
 	maxConcurrentTargets, err := multiclusterMaxConcurrentTargets(*multicluster)
 	if err != nil {
@@ -78,10 +78,28 @@ func main() {
 		os.Exit(1)
 	}
 
-	a := adapter.NewWithMaxConcurrentTargets(targets, suspensionClient, cfg, maxConcurrentTargets, logger)
+	targetsSource := newTargetRegistry(targets)
+	var managerErr <-chan error
+	if *multicluster {
+		managerErr, err = startSpokeClusterController(ctx, stop, k8sClient, namespace, targetsSource, logger)
+		if err != nil {
+			logger.Error("fatal error", "error", err)
+			os.Exit(1)
+		}
+	}
+
+	a := adapter.NewWithMaxConcurrentTargets(targetsSource, suspensionClient, cfg, maxConcurrentTargets, logger)
 	if err := a.Run(ctx); err != nil {
 		logger.Error("fatal error", "error", err)
 		os.Exit(1)
+	}
+	if managerErr != nil {
+		select {
+		case err := <-managerErr:
+			logger.Error("fatal error", "error", err)
+			os.Exit(1)
+		default:
+		}
 	}
 }
 
@@ -136,7 +154,7 @@ func newClientForConfig(cfg *rest.Config) (client.Client, error) {
 // SpokeCluster whose credential Secret can be loaded and parsed. It returns an
 // error if the local Alertmanager client cannot be created, SpokeClusters
 // cannot be listed, or no targets are configured.
-func newTargets(ctx context.Context, k8sClient client.Client, namespace string, multicluster bool, logger *slog.Logger) ([]adapter.Target, error) {
+func newTargets(ctx context.Context, k8sClient client.Client, namespace string, multiCluster bool, logger *slog.Logger) ([]adapter.Target, error) {
 	var targets []adapter.Target
 
 	amURL, amURLSet := os.LookupEnv("ALERTMANAGER_URL")
@@ -158,7 +176,7 @@ func newTargets(ctx context.Context, k8sClient client.Client, namespace string, 
 		})
 	}
 
-	if !multicluster {
+	if !multiCluster {
 		if len(targets) == 0 {
 			return nil, fmt.Errorf("no targets configured: set ALERTMANAGER_URL")
 		}
@@ -171,45 +189,11 @@ func newTargets(ctx context.Context, k8sClient client.Client, namespace string, 
 	}
 
 	for _, spokeCluster := range spokeClusters.Items {
-		secretName := spokeCluster.GetLabels()[alertCredentialSecretLabel]
-		if secretName == "" {
+		target, ok := multicluster.BuildTarget(ctx, k8sClient, k8sClient, namespace, &spokeCluster, logger)
+		if !ok {
 			continue
 		}
-
-		targetLogger := logger.With("target", spokeCluster.GetName())
-		targetID := agenticrun.SpokeTargetID(spokeCluster.GetName())
-
-		var secret corev1.Secret
-		key := types.NamespacedName{Name: secretName, Namespace: namespace}
-		if err := k8sClient.Get(ctx, key, &secret); err != nil {
-			targetLogger.Error("skipping spoke target: loading alert credential secret failed", "error", err)
-			continue
-		}
-
-		url, token, caBundle, err := alertCredentialsFromSecret(&secret)
-		if err != nil {
-			targetLogger.Error("skipping spoke target: alert credentials unavailable", "error", err)
-			continue
-		}
-
-		alerts, err := alertmanager.New(alertmanager.Config{
-			URL:      url,
-			CABundle: caBundle,
-			CASource: fmt.Sprintf("Secret %s/%s data %q", namespace, secretName, caBundleKey),
-			Token:    token,
-		})
-		if err != nil {
-			targetLogger.Error("skipping spoke target: creating alertmanager client failed", "error", err)
-			continue
-		}
-
-		targets = append(targets, adapter.Target{
-			Name:      spokeCluster.GetName(),
-			ID:        targetID,
-			Alerts:    alerts,
-			ARClient:  agenticrun.NewClient(k8sClient, namespace, targetID, targetLogger),
-			Namespace: namespace,
-		})
+		targets = append(targets, target)
 	}
 
 	if len(targets) == 0 {
@@ -219,20 +203,61 @@ func newTargets(ctx context.Context, k8sClient client.Client, namespace string, 
 	return targets, nil
 }
 
-// alertCredentialsFromSecret returns the Alertmanager URL, bearer token, and
-// CA bundle from secret, or an error when a required data value is absent.
-func alertCredentialsFromSecret(secret *corev1.Secret) (string, string, []byte, error) {
-	url := string(secret.Data[alertmanagerURLKey])
-	if url == "" {
-		return "", "", nil, fmt.Errorf("missing %q data key", alertmanagerURLKey)
+// newTargetRegistry separates fixed local targets from dynamic spoke targets.
+func newTargetRegistry(targets []adapter.Target) *multicluster.Registry {
+	var local, spokes []adapter.Target
+	for _, target := range targets {
+		if target.ID == "" {
+			local = append(local, target)
+			continue
+		}
+		spokes = append(spokes, target)
 	}
-	token := string(secret.Data[tokenKey])
-	if token == "" {
-		return "", "", nil, fmt.Errorf("missing %q data key", tokenKey)
+	return multicluster.NewRegistry(local, spokes)
+}
+
+// startSpokeClusterController starts the multicluster SpokeCluster controller.
+func startSpokeClusterController(ctx context.Context, stop context.CancelFunc, k8sClient client.Client, namespace string, targets *multicluster.Registry, logger *slog.Logger) (<-chan error, error) {
+	restConfig, err := ctrl.GetConfig()
+	if err != nil {
+		return nil, fmt.Errorf("loading kubeconfig for SpokeCluster controller: %w", err)
 	}
-	caBundle := secret.Data[caBundleKey]
-	if len(caBundle) == 0 {
-		return "", "", nil, fmt.Errorf("missing %q data key", caBundleKey)
+	manager, err := ctrl.NewManager(restConfig, ctrl.Options{
+		Scheme:  k8sClient.Scheme(),
+		Metrics: metricsserver.Options{BindAddress: "0"},
+	})
+	if err != nil {
+		return nil, fmt.Errorf("creating SpokeCluster controller manager: %w", err)
 	}
-	return url, token, caBundle, nil
+	reconciler := &multicluster.Reconciler{
+		Client:    manager.GetClient(),
+		APIReader: manager.GetAPIReader(),
+		RunClient: k8sClient,
+		Namespace: namespace,
+		Targets:   targets,
+		Logger:    logger,
+	}
+	if err := reconciler.SetupWithManager(manager); err != nil {
+		return nil, fmt.Errorf("setting up SpokeCluster controller: %w", err)
+	}
+
+	return runControllerManager(ctx, stop, manager.Start), nil
+}
+
+// runControllerManager starts a controller manager and stops the poll loop
+// when it exits before context cancellation.
+func runControllerManager(ctx context.Context, stop context.CancelFunc, start func(context.Context) error) <-chan error {
+	errCh := make(chan error, 1)
+	go func() {
+		err := start(ctx)
+		if ctx.Err() != nil {
+			return
+		}
+		if err == nil {
+			err = errors.New("SpokeCluster controller manager stopped unexpectedly")
+		}
+		errCh <- err
+		stop()
+	}()
+	return errCh
 }
