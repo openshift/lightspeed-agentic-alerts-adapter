@@ -56,8 +56,8 @@ func TestCreateAgenticRun(t *testing.T) {
 	if got.Spec.Request != "test request" {
 		t.Errorf("request = %q, want %q", got.Spec.Request, "test request")
 	}
-	if got.Labels[LabelSourceTarget] != "local" {
-		t.Errorf("source target = %q, want %q", got.Labels[LabelSourceTarget], "local")
+	if got.Labels[LabelSpokeCluster] != "local" {
+		t.Errorf("source target = %q, want %q", got.Labels[LabelSpokeCluster], "local")
 	}
 }
 
@@ -149,7 +149,7 @@ func TestListAgenticRuns(t *testing.T) {
 			Namespace: RunNamespace,
 			Labels: map[string]string{
 				LabelSource:       sourceValue,
-				LabelSourceTarget: "local",
+				LabelSpokeCluster: "local",
 			},
 		},
 		Spec: agenticv1alpha1.AgenticRunSpec{
@@ -188,33 +188,43 @@ func TestListAgenticRuns(t *testing.T) {
 	}
 }
 
-func TestListAgenticRunsIncludesLegacyLocalRuns(t *testing.T) {
+func TestListAgenticRunsForSpokeTarget(t *testing.T) {
 	c := newTestClient(t)
+	c.target = "spoke-prod-east"
 
-	legacy := &agenticv1alpha1.AgenticRun{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "legacy-local-abcdef12",
-			Namespace: RunNamespace,
-			Labels: map[string]string{
-				LabelSource: sourceValue,
+	runsToCreate := []*agenticv1alpha1.AgenticRun{
+		{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "matching-spoke-abcdef12",
+				Namespace: RunNamespace,
+				Labels: map[string]string{
+					LabelSource:       sourceValue,
+					LabelSpokeCluster: "spoke-prod-east",
+				},
+			},
+		},
+		{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "other-spoke-abcdef12",
+				Namespace: RunNamespace,
+				Labels: map[string]string{
+					LabelSource:       sourceValue,
+					LabelSpokeCluster: "spoke-prod-west",
+				},
+			},
+		},
+		{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "legacy-local-abcdef12",
+				Namespace: RunNamespace,
+				Labels:    map[string]string{LabelSource: sourceValue},
 			},
 		},
 	}
-	spoke := &agenticv1alpha1.AgenticRun{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "spoke-run-abcdef12",
-			Namespace: RunNamespace,
-			Labels: map[string]string{
-				LabelSource:       sourceValue,
-				LabelSourceTarget: "spoke-prod-east",
-			},
-		},
-	}
-	if err := c.Create(t.Context(), legacy); err != nil {
-		t.Fatalf("creating legacy local run: %v", err)
-	}
-	if err := c.Create(t.Context(), spoke); err != nil {
-		t.Fatalf("creating spoke run: %v", err)
+	for _, run := range runsToCreate {
+		if err := c.Create(t.Context(), run); err != nil {
+			t.Fatalf("creating run %q: %v", run.Name, err)
+		}
 	}
 
 	runs, err := c.ListAgenticRuns(t.Context())
@@ -224,8 +234,8 @@ func TestListAgenticRunsIncludesLegacyLocalRuns(t *testing.T) {
 	if len(runs) != 1 {
 		t.Fatalf("got %d runs, want 1", len(runs))
 	}
-	if runs[0].Name != legacy.Name {
-		t.Errorf("name = %q, want %q", runs[0].Name, legacy.Name)
+	if runs[0].Name != "matching-spoke-abcdef12" {
+		t.Errorf("name = %q, want %q", runs[0].Name, "matching-spoke-abcdef12")
 	}
 }
 
