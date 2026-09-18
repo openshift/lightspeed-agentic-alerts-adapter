@@ -219,6 +219,79 @@ func TestGetAlertsMissingTokenFile(t *testing.T) {
 	}
 }
 
+func TestGetAlertsWithConfiguredToken(t *testing.T) {
+	tests := []struct {
+		name        string
+		token       string
+		wantBearer  string
+		trustServer bool
+		errText     string
+	}{
+		{
+			name:        "sends configured bearer token",
+			token:       "configured-token",
+			wantBearer:  "Bearer configured-token",
+			trustServer: true,
+		},
+		{
+			name:        "trims configured bearer token",
+			token:       "configured-token\n",
+			wantBearer:  "Bearer configured-token",
+			trustServer: true,
+		},
+		{
+			name:    "rejects untrusted tls certificate",
+			token:   "configured-token",
+			errText: "tls: failed to verify certificate",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				if got := r.Header.Get("Authorization"); got != tt.wantBearer {
+					t.Errorf("Authorization = %q, want %q", got, tt.wantBearer)
+				}
+				w.Header().Set("Content-Type", "application/json")
+				_, _ = w.Write([]byte(`[]`))
+			}))
+			defer server.Close()
+
+			var caBundle []byte
+			if tt.trustServer {
+				var err error
+				caBundle, err = os.ReadFile(setupCAFile(t, server))
+				if err != nil {
+					t.Fatal(err)
+				}
+			}
+			client, err := New(Config{
+				URL:      server.URL,
+				CABundle: caBundle,
+				CASource: "test CA bundle",
+				Token:    tt.token,
+			})
+			if err != nil {
+				t.Fatalf("unexpected error creating client: %v", err)
+			}
+
+			_, err = client.GetAlerts(context.Background())
+			if tt.errText != "" {
+				if err == nil {
+					t.Fatal("expected error, got nil")
+				}
+				if !strings.Contains(err.Error(), tt.errText) {
+					t.Errorf("error = %q, want it to contain %q", err, tt.errText)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("unexpected error retrieving alerts: %v", err)
+			}
+		})
+	}
+}
+
 func TestNewMissingCAFile(t *testing.T) {
 	_, err := New(Config{
 		URL:       "https://localhost:9094",
@@ -246,6 +319,20 @@ func TestNewInvalidURL(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "parsing url") {
 		t.Errorf("error %q does not mention url parsing", err.Error())
+	}
+}
+
+func TestNewRejectsNonHTTPSURL(t *testing.T) {
+	_, err := New(Config{
+		URL:       "http://alertmanager.example.com",
+		TokenPath: "/some/path",
+		CAPath:    "/some/path",
+	})
+	if err == nil {
+		t.Fatal("expected error for non-HTTPS URL, got nil")
+	}
+	if !strings.Contains(err.Error(), "scheme must be https") {
+		t.Errorf("error %q does not require HTTPS", err.Error())
 	}
 }
 
@@ -302,4 +389,3 @@ func TestNewConfigCustomURL(t *testing.T) {
 		t.Errorf("token path = %q, want %q", cfg.TokenPath, defaultTokenPath)
 	}
 }
-

@@ -1,6 +1,6 @@
 # Build output
 bin/
-alerts-adapter
+
 
 # Test & profiling
 coverage.out

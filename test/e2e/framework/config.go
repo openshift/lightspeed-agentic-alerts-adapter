@@ -3,18 +3,18 @@ package framework
 import "os"
 
 const (
-	defaultNamespace         = "openshift-lightspeed"
-	defaultDeploymentName    = "lightspeed-agentic-alerts-adapter"
-	defaultOperatorNamespace = "openshift-lightspeed"
+	defaultNamespace          = "openshift-lightspeed"
+	defaultDeploymentName     = "lightspeed-agentic-alerts-adapter"
+	defaultOperatorNamespace  = "openshift-lightspeed"
 	defaultOperatorDeployment = "lightspeed-agentic-operator"
 )
 
 type Config struct {
-	Namespace           string
-	DeploymentName      string
-	Image               string
-	OperatorNamespace   string
-	OperatorDeployment  string
+	Namespace          string
+	DeploymentName     string
+	Image              string
+	OperatorNamespace  string
+	OperatorDeployment string
 }
 
 func LoadConfig() Config {

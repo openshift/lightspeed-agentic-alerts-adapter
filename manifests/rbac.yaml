@@ -8,6 +8,9 @@ rules:
   - apiGroups: ["agentic.openshift.io"]
     resources: ["agenticruns"]
     verbs: ["create", "list", "get"]
+  - apiGroups: [""]
+    resources: ["secrets"]
+    verbs: ["get"]
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: RoleBinding
@@ -38,6 +41,7 @@ subjects:
     name: lightspeed-agentic-alerts-adapter
     namespace: openshift-lightspeed
 ---
+
 # AgenticOLSConfig: read cluster-wide suspension state.
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
@@ -49,6 +53,18 @@ rules:
     resourceNames: ["cluster"]
     verbs: ["get"]
 ---
+
+# SpokeClusters: discover spoke Alertmanager credential Secrets.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: lightspeed-agentic-alerts-adapter-spokeclusters
+rules:
+  - apiGroups: ["hub.openshift.io"]
+    resources: ["spokeclusters"]
+    verbs: ["get", "list", "watch"]
+
+---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRoleBinding
 metadata:
@@ -57,6 +73,19 @@ roleRef:
   apiGroup: rbac.authorization.k8s.io
   kind: ClusterRole
   name: lightspeed-agentic-alerts-adapter-agenticolsconfig
+subjects:
+  - kind: ServiceAccount
+    name: lightspeed-agentic-alerts-adapter
+    namespace: openshift-lightspeed
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: lightspeed-agentic-alerts-adapter-spokeclusters
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: lightspeed-agentic-alerts-adapter-spokeclusters
 subjects:
   - kind: ServiceAccount
     name: lightspeed-agentic-alerts-adapter

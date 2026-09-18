@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"slices"
 	"strings"
+	"sync"
 	"time"
 
 	agenticv1alpha1 "github.com/openshift/lightspeed-agentic-operator/api/v1alpha1"
@@ -33,28 +34,56 @@ type SuspensionSource interface {
 	Suspended(ctx context.Context) (bool, error)
 }
 
+// Target is one independently reconciled cluster.
+type Target struct {
+	// Name is "local" for the hub target or the unmodified SpokeCluster name.
+	Name string
+	// ID is the label-safe target identity used to scope AgenticRun names and
+	// deduplication. It is empty for the local target.
+	ID        string
+	Alerts    AlertSource
+	ARClient  AgenticRunClient
+	Namespace string
+}
+
+// TargetSource returns a point-in-time snapshot of reconciliation targets.
+type TargetSource interface {
+	Targets() []Target
+}
+
+// StaticTargetSource returns a fixed copy of its configured targets.
+type StaticTargetSource []Target
+
+// Targets returns a copy of the configured targets.
+func (s StaticTargetSource) Targets() []Target {
+	return slices.Clone(s)
+}
+
 // Adapter polls AlertManager for firing alerts and creates AgenticRun CRs,
 // applying stateless deduplication (pre-run delay, active-run check,
 // and post-run delay) on each cycle.
 type Adapter struct {
-	alerts     AlertSource
-	arClient   AgenticRunClient
-	suspension SuspensionSource
-	cfg        config.Config
-	namespace  string
-	logger     *slog.Logger
+	targets              TargetSource
+	suspension           SuspensionSource
+	cfg                  config.Config
+	maxConcurrentTargets int
+	logger               *slog.Logger
 }
 
-// New creates an Adapter with the given alert source, run client,
-// suspension source, config, namespace, and logger.
-func New(alerts AlertSource, arClient AgenticRunClient, suspension SuspensionSource, cfg config.Config, namespace string, logger *slog.Logger) *Adapter {
+// New creates an Adapter with the given reconciliation targets, config, and logger.
+func New(targets TargetSource, suspension SuspensionSource, cfg config.Config, logger *slog.Logger) *Adapter {
+	return NewWithMaxConcurrentTargets(targets, suspension, cfg, 1, logger)
+}
+
+// NewWithMaxConcurrentTargets creates an Adapter that reconciles no more than
+// maxConcurrentTargets targets simultaneously.
+func NewWithMaxConcurrentTargets(targets TargetSource, suspension SuspensionSource, cfg config.Config, maxConcurrentTargets int, logger *slog.Logger) *Adapter {
 	return &Adapter{
-		alerts:     alerts,
-		arClient:   arClient,
-		suspension: suspension,
-		cfg:        cfg,
-		namespace:  namespace,
-		logger:     logger,
+		targets:              targets,
+		suspension:           suspension,
+		cfg:                  cfg,
+		maxConcurrentTargets: maxConcurrentTargets,
+		logger:               logger,
 	}
 }
 
@@ -96,15 +125,46 @@ func (a *Adapter) reconcile(ctx context.Context) {
 		return
 	}
 
-	alerts, err := a.alerts.GetAlerts(ctx)
+	maxConcurrentTargets := a.maxConcurrentTargets
+	if maxConcurrentTargets < 1 {
+		maxConcurrentTargets = 1
+	}
+
+	targets := a.targets.Targets()
+	semaphore := make(chan struct{}, maxConcurrentTargets)
+	var wg sync.WaitGroup
+
+	for _, target := range targets {
+		select {
+		case <-ctx.Done():
+			wg.Wait()
+			return
+		case semaphore <- struct{}{}:
+		}
+
+		wg.Add(1)
+		go func(target Target) {
+			defer wg.Done()
+			defer func() { <-semaphore }()
+			targetCtx, cancel := context.WithTimeout(ctx, a.cfg.PollInterval)
+			defer cancel()
+			a.reconcileTarget(targetCtx, target)
+		}(target)
+	}
+
+	wg.Wait()
+}
+
+func (a *Adapter) reconcileTarget(ctx context.Context, target Target) {
+	alerts, err := target.Alerts.GetAlerts(ctx)
 	if err != nil {
-		a.logger.Error("failed to get alerts", "error", err)
+		a.logger.Error("failed to get alerts", "target", target.Name, "error", err)
 		return
 	}
 
-	runs, err := a.arClient.ListAgenticRuns(ctx)
+	runs, err := target.ARClient.ListAgenticRuns(ctx)
 	if err != nil {
-		a.logger.Error("failed to list runs", "error", err)
+		a.logger.Error("failed to list runs", "target", target.Name, "error", err)
 		return
 	}
 
@@ -126,6 +186,7 @@ func (a *Adapter) reconcile(ctx context.Context) {
 
 		if skipReceiver(alert, a.cfg.AllowedReceivers) {
 			a.logger.Debug("alert skipped: no matching receiver",
+				"target", target.Name,
 				"alertname", alertName,
 				"fingerprint", fingerprint,
 				"receivers", receiverNames(alert),
@@ -136,6 +197,7 @@ func (a *Adapter) reconcile(ctx context.Context) {
 
 		if a.cfg.PreRunDelay > 0 && tooEarly(alert, now, a.cfg.PreRunDelay) {
 			a.logger.Debug("alert skipped: pre-run delay",
+				"target", target.Name,
 				"alertname", alertName,
 				"fingerprint", fingerprint,
 				"startsAt", alert.StartsAt,
@@ -149,6 +211,7 @@ func (a *Adapter) reconcile(ctx context.Context) {
 
 		if hasActiveRun(stableFP, runs) {
 			a.logger.Debug("alert skipped: active run exists",
+				"target", target.Name,
 				"alertname", alertName,
 				"fingerprint", fingerprint,
 			)
@@ -158,6 +221,7 @@ func (a *Adapter) reconcile(ctx context.Context) {
 
 		if a.cfg.PostRunDelay > 0 && tooRecent(stableFP, runs, now, a.cfg.PostRunDelay) {
 			a.logger.Debug("alert skipped: post-run delay",
+				"target", target.Name,
 				"alertname", alertName,
 				"fingerprint", fingerprint,
 				"postRunDelay", a.cfg.PostRunDelay,
@@ -166,9 +230,14 @@ func (a *Adapter) reconcile(ctx context.Context) {
 			continue
 		}
 
-		p, err := agenticrun.Build(alert, a.cfg.Tools, a.cfg.Agent, a.cfg.IgnoredLabels, a.namespace)
+		targetCluster := ""
+		if target.ID != "" {
+			targetCluster = target.Name
+		}
+		p, err := agenticrun.BuildForTarget(alert, a.cfg.Tools, a.cfg.Agent, a.cfg.IgnoredLabels, target.Namespace, target.ID, targetCluster)
 		if err != nil {
 			a.logger.Error("failed to build run",
+				"target", target.Name,
 				"alertname", alertName,
 				"fingerprint", fingerprint,
 				"error", err,
@@ -180,9 +249,10 @@ func (a *Adapter) reconcile(ctx context.Context) {
 			p.Name = agenticrun.NextAvailableName(p.Name, runNames(runs))
 		}
 
-		wasCreated, err := a.arClient.CreateAgenticRun(ctx, p)
+		wasCreated, err := target.ARClient.CreateAgenticRun(ctx, p)
 		if err != nil {
 			a.logger.Error("failed to create run",
+				"target", target.Name,
 				"alertname", alertName,
 				"fingerprint", fingerprint,
 				"run", p.Name,
@@ -194,6 +264,7 @@ func (a *Adapter) reconcile(ctx context.Context) {
 		if wasCreated {
 			runs = append(runs, *p)
 			a.logger.Info("run created",
+				"target", target.Name,
 				"alertname", alertName,
 				"fingerprint", fingerprint,
 				"run", p.Name,
@@ -203,6 +274,7 @@ func (a *Adapter) reconcile(ctx context.Context) {
 	}
 
 	a.logger.Info("poll cycle complete",
+		"target", target.Name,
 		"alertsTotal", len(alerts),
 		"skipped", skipped,
 		"created", created,

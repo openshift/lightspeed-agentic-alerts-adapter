@@ -3,6 +3,7 @@ package agenticrun
 import (
 	"io"
 	"log/slog"
+	"strings"
 	"testing"
 
 	agenticv1alpha1 "github.com/openshift/lightspeed-agentic-operator/api/v1alpha1"
@@ -21,7 +22,7 @@ func newTestClient(t *testing.T) *Client {
 
 	fc := fake.NewClientBuilder().WithScheme(scheme).Build()
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
-	return &Client{Client: fc, namespace: RunNamespace, logger: logger}
+	return &Client{Client: fc, namespace: RunNamespace, target: "local", logger: logger}
 }
 
 func TestCreateAgenticRun(t *testing.T) {
@@ -54,6 +55,9 @@ func TestCreateAgenticRun(t *testing.T) {
 
 	if got.Spec.Request != "test request" {
 		t.Errorf("request = %q, want %q", got.Spec.Request, "test request")
+	}
+	if got.Labels[LabelSpokeCluster] != "local" {
+		t.Errorf("source target = %q, want %q", got.Labels[LabelSpokeCluster], "local")
 	}
 }
 
@@ -94,6 +98,48 @@ func TestCreateAgenticRunAlreadyExists(t *testing.T) {
 	}
 }
 
+func TestSpokeTargetID(t *testing.T) {
+	longName := "a-very-long-spoke-cluster-name-that-exceeds-the-kubernetes-label-value-limit"
+
+	tests := []struct {
+		name  string
+		input string
+		want  string
+	}{
+		{
+			name:  "short name",
+			input: "prod-east",
+			want:  "spoke-prod-east",
+		},
+		{
+			name:  "local name remains distinct from local target",
+			input: "local",
+			want:  "spoke-local",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := SpokeTargetID(tt.input); got != tt.want {
+				t.Errorf("SpokeTargetID(%q) = %q, want %q", tt.input, got, tt.want)
+			}
+		})
+	}
+
+	t.Run("long name is bounded and deterministic", func(t *testing.T) {
+		got := SpokeTargetID(longName)
+		if len(got) != targetIDMaxLen {
+			t.Errorf("SpokeTargetID(%q) length = %d, want %d", longName, len(got), targetIDMaxLen)
+		}
+		if !strings.HasPrefix(got, spokeTargetPrefix+longName[:44]+"-") {
+			t.Errorf("SpokeTargetID(%q) = %q, want readable prefix", longName, got)
+		}
+		if got != SpokeTargetID(longName) {
+			t.Errorf("SpokeTargetID(%q) is not deterministic", longName)
+		}
+	})
+}
+
 func TestListAgenticRuns(t *testing.T) {
 	c := newTestClient(t)
 
@@ -101,7 +147,10 @@ func TestListAgenticRuns(t *testing.T) {
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "matching-abcdef12",
 			Namespace: RunNamespace,
-			Labels:    map[string]string{LabelSource: sourceValue},
+			Labels: map[string]string{
+				LabelSource:       sourceValue,
+				LabelSpokeCluster: "local",
+			},
 		},
 		Spec: agenticv1alpha1.AgenticRunSpec{
 			Request:  "matching",
@@ -136,6 +185,57 @@ func TestListAgenticRuns(t *testing.T) {
 	}
 	if runs[0].Name != "matching-abcdef12" {
 		t.Errorf("name = %q, want %q", runs[0].Name, "matching-abcdef12")
+	}
+}
+
+func TestListAgenticRunsForSpokeTarget(t *testing.T) {
+	c := newTestClient(t)
+	c.target = "spoke-prod-east"
+
+	runsToCreate := []*agenticv1alpha1.AgenticRun{
+		{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "matching-spoke-abcdef12",
+				Namespace: RunNamespace,
+				Labels: map[string]string{
+					LabelSource:       sourceValue,
+					LabelSpokeCluster: "spoke-prod-east",
+				},
+			},
+		},
+		{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "other-spoke-abcdef12",
+				Namespace: RunNamespace,
+				Labels: map[string]string{
+					LabelSource:       sourceValue,
+					LabelSpokeCluster: "spoke-prod-west",
+				},
+			},
+		},
+		{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "legacy-local-abcdef12",
+				Namespace: RunNamespace,
+				Labels:    map[string]string{LabelSource: sourceValue},
+			},
+		},
+	}
+	for _, run := range runsToCreate {
+		if err := c.Create(t.Context(), run); err != nil {
+			t.Fatalf("creating run %q: %v", run.Name, err)
+		}
+	}
+
+	runs, err := c.ListAgenticRuns(t.Context())
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(runs) != 1 {
+		t.Fatalf("got %d runs, want 1", len(runs))
+	}
+	if runs[0].Name != "matching-spoke-abcdef12" {
+		t.Errorf("name = %q, want %q", runs[0].Name, "matching-spoke-abcdef12")
 	}
 }
 
