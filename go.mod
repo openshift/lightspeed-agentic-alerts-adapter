@@ -3,13 +3,14 @@ module github.com/openshift/lightspeed-agentic-alerts-adapter
 go 1.26.0
 
 require (
+	github.com/go-logr/logr v1.4.4
 	github.com/go-openapi/runtime v0.33.2
 	github.com/go-openapi/strfmt v0.27.2
 	github.com/onsi/ginkgo/v2 v2.33.0
 	github.com/onsi/gomega v1.43.0
-	github.com/prometheus/alertmanager v0.34.1
 	github.com/openshift/lightspeed-agentic-operator/api v0.0.0-20260916131657-ab8a63d29be6
 	github.com/openshift/lightspeed-hub v0.0.0-20260911154804-5f9c9000d10f
+	github.com/prometheus/alertmanager v0.34.1
 	go.yaml.in/yaml/v3 v3.0.5
 	k8s.io/api v0.37.0
 	k8s.io/apimachinery v0.37.0
@@ -27,7 +28,6 @@ require (
 	github.com/evanphx/json-patch/v5 v5.9.11 // indirect
 	github.com/fsnotify/fsnotify v1.10.1 // indirect
 	github.com/fxamacker/cbor/v2 v2.9.3 // indirect
-	github.com/go-logr/logr v1.4.4 // indirect
 	github.com/go-logr/stdr v1.2.2 // indirect
 	github.com/go-openapi/analysis v1.0.0 // indirect
 	github.com/go-openapi/errors v0.22.8 // indirect

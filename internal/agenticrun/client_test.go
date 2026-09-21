@@ -61,6 +61,43 @@ func TestCreateAgenticRun(t *testing.T) {
 	}
 }
 
+func TestLocalClientDoesNotUseTargetLabel(t *testing.T) {
+	c := newTestClient(t)
+	c.target = ""
+
+	existing := &agenticv1alpha1.AgenticRun{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "existing-abcdef12",
+			Namespace: RunNamespace,
+			Labels:    map[string]string{LabelSource: sourceValue},
+		},
+	}
+	if err := c.Create(t.Context(), existing); err != nil {
+		t.Fatalf("creating existing run: %v", err)
+	}
+
+	runs, err := c.ListAgenticRuns(t.Context())
+	if err != nil {
+		t.Fatalf("listing runs: %v", err)
+	}
+	if len(runs) != 1 {
+		t.Fatalf("len(runs) = %d, want 1", len(runs))
+	}
+
+	p := &agenticv1alpha1.AgenticRun{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "new-abcdef123456",
+			Namespace: RunNamespace,
+		},
+	}
+	if _, err := c.CreateAgenticRun(t.Context(), p); err != nil {
+		t.Fatalf("creating run: %v", err)
+	}
+	if _, ok := p.Labels[LabelSpokeCluster]; ok {
+		t.Errorf("unexpected %q label for local client", LabelSpokeCluster)
+	}
+}
+
 func TestCreateAgenticRunAlreadyExists(t *testing.T) {
 	c := newTestClient(t)
 

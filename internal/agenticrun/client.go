@@ -51,10 +51,11 @@ func NewClient(c client.Client, namespace, target string, logger *slog.Logger) *
 // target.
 func (c *Client) ListAgenticRuns(ctx context.Context) ([]agenticv1alpha1.AgenticRun, error) {
 	var list agenticv1alpha1.AgenticRunList
-	if err := c.List(ctx, &list, client.InNamespace(c.namespace), client.MatchingLabels{
-		LabelSource:       sourceValue,
-		LabelSpokeCluster: c.target,
-	}); err != nil {
+	labels := client.MatchingLabels{LabelSource: sourceValue}
+	if c.target != "" {
+		labels[LabelSpokeCluster] = c.target
+	}
+	if err := c.List(ctx, &list, client.InNamespace(c.namespace), labels); err != nil {
 		return nil, fmt.Errorf("agenticrun: listing runs: %w", err)
 	}
 
@@ -64,10 +65,12 @@ func (c *Client) ListAgenticRuns(ctx context.Context) ([]agenticv1alpha1.Agentic
 // CreateAgenticRun creates an AgenticRun resource in the cluster.
 // It returns true if the AgenticRun was created, false if it already existed.
 func (c *Client) CreateAgenticRun(ctx context.Context, p *agenticv1alpha1.AgenticRun) (bool, error) {
-	if p.Labels == nil {
-		p.Labels = map[string]string{}
+	if c.target != "" {
+		if p.Labels == nil {
+			p.Labels = map[string]string{}
+		}
+		p.Labels[LabelSpokeCluster] = c.target
 	}
-	p.Labels[LabelSpokeCluster] = c.target
 	if err := c.Create(ctx, p); err != nil {
 		if apierrors.IsAlreadyExists(err) {
 			c.logger.Info("run already exists", "name", p.Name, "namespace", p.Namespace)

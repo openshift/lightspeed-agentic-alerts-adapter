@@ -168,10 +168,14 @@ func newTargets(ctx context.Context, k8sClient client.Client, namespace string, 
 			return nil, fmt.Errorf("creating local alertmanager client: %w", err)
 		}
 
+		localTarget := ""
+		if multiCluster {
+			localTarget = "local"
+		}
 		targets = append(targets, adapter.Target{
 			Name:      "local",
 			Alerts:    local,
-			ARClient:  agenticrun.NewClient(k8sClient, namespace, "local", logger),
+			ARClient:  agenticrun.NewClient(k8sClient, namespace, localTarget, logger),
 			Namespace: namespace,
 		})
 	}
