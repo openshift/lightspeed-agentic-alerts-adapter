@@ -8,7 +8,7 @@ require (
 	github.com/onsi/ginkgo/v2 v2.33.0
 	github.com/onsi/gomega v1.43.0
 	github.com/openshift/lightspeed-agentic-operator/api v0.0.0-20260710093841-6e7c2bec3cc5
-	github.com/prometheus/alertmanager v0.34.0
+	github.com/prometheus/alertmanager v0.34.1
 	go.yaml.in/yaml/v3 v3.0.5
 	k8s.io/apimachinery v0.37.0
 	sigs.k8s.io/controller-runtime v0.25.1
