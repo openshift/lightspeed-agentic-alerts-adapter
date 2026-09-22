@@ -1,6 +1,7 @@
 package adapter
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
@@ -16,6 +17,8 @@ import (
 	agenticv1alpha1 "github.com/openshift/lightspeed-agentic-operator/api/v1alpha1"
 	"github.com/prometheus/alertmanager/api/v2/models"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/client-go/util/flowcontrol"
+	clocktesting "k8s.io/utils/clock/testing"
 
 	"github.com/openshift/lightspeed-agentic-alerts-adapter/internal/agenticrun"
 	"github.com/openshift/lightspeed-agentic-alerts-adapter/internal/config"
@@ -987,6 +990,186 @@ func TestReconcileSkipsCycleForSuspensionState(t *testing.T) {
 			}
 			if rc.createCalls != 0 {
 				t.Errorf("CreateAgenticRun called %d times, want 0", rc.createCalls)
+			}
+		})
+	}
+}
+
+func newBackoffTestAdapter(as AlertSource, rc AgenticRunClient, cfg config.Config, now time.Time) (*Adapter, *clocktesting.FakeClock) {
+	clock := clocktesting.NewFakeClock(now)
+	a := testAdapter(as, rc, cfg)
+	a.creationBackoff = flowcontrol.NewFakeBackOff(creationBackoffInitial, creationBackoffMax, clock)
+	a.now = clock.Now
+	return a, clock
+}
+
+func TestReconcileCreationBackoff(t *testing.T) {
+	now := time.Date(2026, time.January, 1, 0, 0, 0, 0, time.UTC)
+	alert := makeAlert("HighCPU", "abcdef1234567890", now.Add(-10*time.Minute))
+	createErr := errors.New("api server unavailable")
+
+	tests := []struct {
+		name  string
+		steps []struct {
+			advance     time.Duration
+			createErr   error
+			wasCreated  *bool
+			wantCalls   int
+			wantBackoff time.Duration
+		}
+		wantLogs []string
+	}{
+		{
+			name: "failure backs off exponentially and success resets",
+			steps: []struct {
+				advance     time.Duration
+				createErr   error
+				wasCreated  *bool
+				wantCalls   int
+				wantBackoff time.Duration
+			}{
+				{createErr: createErr, wantCalls: 1, wantBackoff: creationBackoffInitial},
+				{advance: 30 * time.Second, createErr: createErr, wantCalls: 1, wantBackoff: creationBackoffInitial},
+				{advance: 30 * time.Second, createErr: createErr, wantCalls: 2, wantBackoff: 2 * creationBackoffInitial},
+				{advance: 2 * creationBackoffInitial, wantCalls: 3, wantBackoff: 0},
+			},
+			wantLogs: []string{
+				"entering backoff",
+				"increasing backoff",
+				"backoff cleared",
+				"target=local",
+				"backoffDuration=1m0s",
+				"backoffDuration=2m0s",
+			},
+		},
+		{
+			name: "AlreadyExists clears backoff without creating",
+			steps: []struct {
+				advance     time.Duration
+				createErr   error
+				wasCreated  *bool
+				wantCalls   int
+				wantBackoff time.Duration
+			}{
+				{createErr: createErr, wantCalls: 1, wantBackoff: creationBackoffInitial},
+				{advance: creationBackoffInitial, wasCreated: ptr(false), wantCalls: 2, wantBackoff: 0},
+			},
+			wantLogs: []string{"backoff cleared"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			as := &fakeAlertSource{alerts: models.GettableAlerts{alert}}
+			rc := &fakeRunClient{}
+			a, clock := newBackoffTestAdapter(as, rc, defaultTestConfig(), now)
+			var logs bytes.Buffer
+			a.logger = slog.New(slog.NewTextHandler(&logs, nil))
+			key := creationBackoffKey("local", stableFP(alert.Labels))
+
+			for stepIndex, step := range tt.steps {
+				clock.Step(step.advance)
+				rc.createErr = step.createErr
+				rc.wasCreated = step.wasCreated
+				a.reconcile(t.Context())
+
+				if rc.createCalls != step.wantCalls {
+					t.Errorf("step %d: CreateAgenticRun calls = %d, want %d", stepIndex, rc.createCalls, step.wantCalls)
+				}
+				if got := a.creationBackoff.Get(key); got != step.wantBackoff {
+					t.Errorf("step %d: backoff = %s, want %s", stepIndex, got, step.wantBackoff)
+				}
+			}
+
+			for _, message := range tt.wantLogs {
+				if !strings.Contains(logs.String(), message) {
+					t.Errorf("logs do not contain %q:\n%s", message, logs.String())
+				}
+			}
+		})
+	}
+}
+
+func TestReconcileCreationBackoffIsolatedByTarget(t *testing.T) {
+	now := time.Date(2026, time.January, 1, 0, 0, 0, 0, time.UTC)
+	alert := makeAlert("HighCPU", "abcdef1234567890", now.Add(-10*time.Minute))
+	failingRuns := &fakeRunClient{createErr: errors.New("api server unavailable")}
+	successfulRuns := &fakeRunClient{}
+	clock := clocktesting.NewFakeClock(now)
+
+	a := &Adapter{
+		targets: StaticTargetSource{
+			{Name: "local", Alerts: &fakeAlertSource{alerts: models.GettableAlerts{alert}}, ARClient: failingRuns, Namespace: agenticrun.RunNamespace},
+			{Name: "spoke", Alerts: &fakeAlertSource{alerts: models.GettableAlerts{alert}}, ARClient: successfulRuns, Namespace: agenticrun.RunNamespace},
+		},
+		suspension:           &fakeSuspensionSource{},
+		cfg:                  defaultTestConfig(),
+		maxConcurrentTargets: 1,
+		logger:               quietLogger(),
+		creationBackoff:      flowcontrol.NewFakeBackOff(creationBackoffInitial, creationBackoffMax, clock),
+		now:                  clock.Now,
+	}
+
+	a.reconcile(t.Context())
+	clock.Step(30 * time.Second)
+	a.reconcile(t.Context())
+
+	if failingRuns.createCalls != 1 {
+		t.Errorf("failing target CreateAgenticRun calls = %d, want 1", failingRuns.createCalls)
+	}
+	if successfulRuns.createCalls != 2 {
+		t.Errorf("successful target CreateAgenticRun calls = %d, want 2", successfulRuns.createCalls)
+	}
+}
+
+type cancelingRunClient struct {
+	cancel      context.CancelFunc
+	createCalls int
+}
+
+func (c *cancelingRunClient) ListAgenticRuns(context.Context) ([]agenticv1alpha1.AgenticRun, error) {
+	return nil, nil
+}
+
+func (c *cancelingRunClient) CreateAgenticRun(context.Context, *agenticv1alpha1.AgenticRun) (bool, error) {
+	c.createCalls++
+	c.cancel()
+	return false, errors.New("context canceled during creation")
+}
+
+func TestReconcileCreationBackoffDoesNotRecordNonCreationFailures(t *testing.T) {
+	now := time.Date(2026, time.January, 1, 0, 0, 0, 0, time.UTC)
+	alert := makeAlert("HighCPU", "abcdef1234567890", now.Add(-10*time.Minute))
+
+	tests := []struct {
+		name  string
+		setup func(t *testing.T) (AlertSource, AgenticRunClient, context.Context)
+	}{
+		{
+			name: "alert retrieval error",
+			setup: func(t *testing.T) (AlertSource, AgenticRunClient, context.Context) {
+				return &fakeAlertSource{alerts: models.GettableAlerts{alert}, err: errors.New("alertmanager unavailable")}, &fakeRunClient{}, t.Context()
+			},
+		},
+		{
+			name: "canceled creation context",
+			setup: func(t *testing.T) (AlertSource, AgenticRunClient, context.Context) {
+				ctx, cancel := context.WithCancel(t.Context())
+				return &fakeAlertSource{alerts: models.GettableAlerts{alert}}, &cancelingRunClient{cancel: cancel}, ctx
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			as, rc, ctx := tt.setup(t)
+			a, _ := newBackoffTestAdapter(as, rc, defaultTestConfig(), now)
+			key := creationBackoffKey("local", stableFP(alert.Labels))
+
+			a.reconcile(ctx)
+
+			if got := a.creationBackoff.Get(key); got != 0 {
+				t.Errorf("backoff = %s, want 0", got)
 			}
 		})
 	}

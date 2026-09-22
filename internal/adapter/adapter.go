@@ -13,9 +13,15 @@ import (
 	agenticv1alpha1 "github.com/openshift/lightspeed-agentic-operator/api/v1alpha1"
 	"github.com/prometheus/alertmanager/api/v2/models"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/client-go/util/flowcontrol"
 
 	"github.com/openshift/lightspeed-agentic-alerts-adapter/internal/agenticrun"
 	"github.com/openshift/lightspeed-agentic-alerts-adapter/internal/config"
+)
+
+const (
+	creationBackoffInitial = time.Minute
+	creationBackoffMax     = 10 * time.Minute
 )
 
 // AlertSource retrieves firing alerts from an external alerting system.
@@ -68,6 +74,8 @@ type Adapter struct {
 	cfg                  config.Config
 	maxConcurrentTargets int
 	logger               *slog.Logger
+	creationBackoff      *flowcontrol.Backoff
+	now                  func() time.Time
 }
 
 // New creates an Adapter with the given reconciliation targets, config, and logger.
@@ -84,6 +92,8 @@ func NewWithMaxConcurrentTargets(targets TargetSource, suspension SuspensionSour
 		cfg:                  cfg,
 		maxConcurrentTargets: maxConcurrentTargets,
 		logger:               logger,
+		creationBackoff:      flowcontrol.NewBackOff(creationBackoffInitial, creationBackoffMax),
+		now:                  time.Now,
 	}
 }
 
@@ -124,6 +134,8 @@ func (a *Adapter) reconcile(ctx context.Context) {
 		a.logger.Info("AgenticOLSConfig suspension is enabled; skipping poll cycle")
 		return
 	}
+
+	a.backoff().GC()
 
 	maxConcurrentTargets := a.maxConcurrentTargets
 	if maxConcurrentTargets < 1 {
@@ -168,7 +180,7 @@ func (a *Adapter) reconcileTarget(ctx context.Context, target Target) {
 		return
 	}
 
-	now := time.Now()
+	now := a.currentTime()
 	var created, skipped int
 
 	for i := range alerts {
@@ -249,16 +261,52 @@ func (a *Adapter) reconcileTarget(ctx context.Context, target Target) {
 			p.Name = agenticrun.NextAvailableName(p.Name, runNames(runs))
 		}
 
+		backoffKey := creationBackoffKey(target.Name, stableFP)
+		backoff := a.backoff()
+		previousBackoff := backoff.Get(backoffKey)
+		if backoff.IsInBackOffSinceUpdate(backoffKey, now) {
+			a.logger.Debug("alert skipped: AgenticRun creation backoff",
+				"target", target.Name,
+				"alertname", alertName,
+				"fingerprint", fingerprint,
+				"backoffDuration", previousBackoff,
+			)
+			skipped++
+			continue
+		}
+
 		wasCreated, err := target.ARClient.CreateAgenticRun(ctx, p)
 		if err != nil {
-			a.logger.Error("failed to create run",
+			if ctx.Err() != nil {
+				return
+			}
+
+			backoff.Next(backoffKey, now)
+			currentBackoff := backoff.Get(backoffKey)
+			message := "AgenticRun creation failed; entering backoff"
+			if previousBackoff > 0 {
+				message = "AgenticRun creation failed; increasing backoff"
+			}
+			a.logger.Warn(message,
 				"target", target.Name,
 				"alertname", alertName,
 				"fingerprint", fingerprint,
 				"run", p.Name,
 				"error", err,
+				"backoffDuration", currentBackoff,
 			)
 			continue
+		}
+
+		if previousBackoff > 0 {
+			backoff.Reset(backoffKey)
+			a.logger.Info("AgenticRun creation backoff cleared",
+				"target", target.Name,
+				"alertname", alertName,
+				"fingerprint", fingerprint,
+				"run", p.Name,
+				"backoffDuration", previousBackoff,
+			)
 		}
 
 		if wasCreated {
@@ -279,6 +327,24 @@ func (a *Adapter) reconcileTarget(ctx context.Context, target Target) {
 		"skipped", skipped,
 		"created", created,
 	)
+}
+
+func (a *Adapter) backoff() *flowcontrol.Backoff {
+	if a.creationBackoff != nil {
+		return a.creationBackoff
+	}
+	return flowcontrol.NewBackOff(creationBackoffInitial, creationBackoffMax)
+}
+
+func (a *Adapter) currentTime() time.Time {
+	if a.now != nil {
+		return a.now()
+	}
+	return time.Now()
+}
+
+func creationBackoffKey(targetName, stableFingerprint string) string {
+	return targetName + "\x00" + stableFingerprint
 }
 
 func skipReceiver(alert *models.GettableAlert, allowed []string) bool {
