@@ -59,6 +59,16 @@ func (c *Client) ListAgenticRuns(ctx context.Context) ([]agenticv1alpha1.Agentic
 		return nil, fmt.Errorf("agenticrun: listing runs: %w", err)
 	}
 
+	if c.target == "" {
+		runs := make([]agenticv1alpha1.AgenticRun, 0, len(list.Items))
+		for i := range list.Items {
+			if _, scoped := list.Items[i].Labels[LabelSpokeCluster]; !scoped {
+				runs = append(runs, list.Items[i])
+			}
+		}
+		return runs, nil
+	}
+
 	return list.Items, nil
 }
 
