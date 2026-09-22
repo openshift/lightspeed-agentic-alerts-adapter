@@ -269,7 +269,7 @@ func (a *Adapter) reconcileTarget(ctx context.Context, target Target) {
 				"target", target.Name,
 				"alertname", alertName,
 				"fingerprint", fingerprint,
-				"backoffDuration", previousBackoff,
+				"backoffDuration", previousBackoff.String(),
 			)
 			skipped++
 			continue
@@ -293,7 +293,7 @@ func (a *Adapter) reconcileTarget(ctx context.Context, target Target) {
 				"fingerprint", fingerprint,
 				"run", p.Name,
 				"error", err,
-				"backoffDuration", currentBackoff,
+				"backoffDuration", currentBackoff.String(),
 			)
 			continue
 		}
@@ -305,7 +305,7 @@ func (a *Adapter) reconcileTarget(ctx context.Context, target Target) {
 				"alertname", alertName,
 				"fingerprint", fingerprint,
 				"run", p.Name,
-				"backoffDuration", previousBackoff,
+				"backoffDuration", previousBackoff.String(),
 			)
 		}
 
