@@ -75,6 +75,19 @@ func TestLocalClientDoesNotUseTargetLabel(t *testing.T) {
 	if err := c.Create(t.Context(), existing); err != nil {
 		t.Fatalf("creating existing run: %v", err)
 	}
+	scoped := &agenticv1alpha1.AgenticRun{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "spoke-run-abcdef12",
+			Namespace: RunNamespace,
+			Labels: map[string]string{
+				LabelSource:       sourceValue,
+				LabelSpokeCluster: "spoke-prod-east",
+			},
+		},
+	}
+	if err := c.Create(t.Context(), scoped); err != nil {
+		t.Fatalf("creating scoped run: %v", err)
+	}
 
 	runs, err := c.ListAgenticRuns(t.Context())
 	if err != nil {
@@ -82,6 +95,9 @@ func TestLocalClientDoesNotUseTargetLabel(t *testing.T) {
 	}
 	if len(runs) != 1 {
 		t.Fatalf("len(runs) = %d, want 1", len(runs))
+	}
+	if runs[0].Name != existing.Name {
+		t.Errorf("run name = %q, want %q", runs[0].Name, existing.Name)
 	}
 
 	p := &agenticv1alpha1.AgenticRun{
