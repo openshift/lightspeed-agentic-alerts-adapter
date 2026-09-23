@@ -153,7 +153,7 @@ func newClientForConfig(cfg *rest.Config) (client.Client, error) {
 // set to empty) and, when multicluster is enabled, one target for each labeled
 // SpokeCluster whose credential Secret can be loaded and parsed. It returns an
 // error if the local Alertmanager client cannot be created, SpokeClusters
-// cannot be listed, or no targets are configured.
+// cannot be listed.
 func newTargets(ctx context.Context, k8sClient client.Client, namespace string, multiCluster bool, logger *slog.Logger) ([]adapter.Target, error) {
 	var targets []adapter.Target
 
@@ -198,10 +198,6 @@ func newTargets(ctx context.Context, k8sClient client.Client, namespace string, 
 			continue
 		}
 		targets = append(targets, target)
-	}
-
-	if len(targets) == 0 {
-		return nil, fmt.Errorf("no targets configured: set ALERTMANAGER_URL or configure spoke clusters")
 	}
 
 	return targets, nil
