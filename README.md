@@ -84,14 +84,11 @@ Runtime-tunable parameters are read from the `alerts-adapter-config` ConfigMap i
 
 #### Tools / Skills
 
-Skills (OCI images with runbook paths) can be configured at a shared level or per AgenticRun step (`analysis`, `execution`, `verification`). Per-step skills override shared skills for that step.
+Skills (OCI images with runbook paths) are configured at the run level and are available to every configured AgenticRun step.
 
 | Field | Description |
 |---|---|
-| `tools.skills` | Shared skills applied to all steps |
-| `analysis.tools.skills` | Skills for the analysis step only |
-| `execution.tools.skills` | Skills for the execution step only |
-| `verification.tools.skills` | Skills for the verification step only |
+| `tools.skills` | Skills applied to all configured steps |
 
 Each skills entry requires `image` (OCI image reference) and `paths` (list of paths within the image).
 
@@ -123,18 +120,6 @@ data:
         - image: quay.io/example/shared-runbooks:latest
           paths:
             - /runbooks/common
-    analysis:
-      tools:
-        skills:
-          - image: quay.io/example/analysis-runbooks:latest
-            paths:
-              - /runbooks/analysis
-    execution:
-      tools:
-        skills:
-          - image: quay.io/example/exec-runbooks:latest
-            paths:
-              - /runbooks/exec
 ```
 
 ## Documentation

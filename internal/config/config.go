@@ -29,12 +29,9 @@ type AgentConfig struct {
 	Verification string
 }
 
-// ToolsConfig holds shared and per-step skills configuration.
+// ToolsConfig holds run-level skills configuration.
 type ToolsConfig struct {
-	Shared       []agenticv1alpha1.SkillsSource
-	Analysis     []agenticv1alpha1.SkillsSource
-	Execution    []agenticv1alpha1.SkillsSource
-	Verification []agenticv1alpha1.SkillsSource
+	Shared []agenticv1alpha1.SkillsSource
 }
 
 // Config holds the adapter's runtime-tunable parameters.
@@ -67,9 +64,6 @@ type configFile struct {
 	Filtering        filteringEntry     `yaml:"filtering"`
 	Deduplication    deduplicationEntry `yaml:"deduplication"`
 	Tools            toolsEntry         `yaml:"tools"`
-	Analysis         stepEntry          `yaml:"analysis"`
-	Execution        stepEntry          `yaml:"execution"`
-	Verification     stepEntry          `yaml:"verification"`
 	Agent            agentEntry         `yaml:"agent"`
 }
 
@@ -90,10 +84,6 @@ type agentEntry struct {
 
 type toolsEntry struct {
 	Skills []skillsEntry `yaml:"skills"`
-}
-
-type stepEntry struct {
-	Tools toolsEntry `yaml:"tools"`
 }
 
 type skillsEntry struct {
@@ -180,10 +170,7 @@ func LoadFromFile(path string, logger *slog.Logger) (Config, error) {
 	}
 
 	cfg.Tools = ToolsConfig{
-		Shared:       parseSkills(cf.Tools.Skills, "shared", logger),
-		Analysis:     parseSkills(cf.Analysis.Tools.Skills, "analysis", logger),
-		Execution:    parseSkills(cf.Execution.Tools.Skills, "execution", logger),
-		Verification: parseSkills(cf.Verification.Tools.Skills, "verification", logger),
+		Shared: parseSkills(cf.Tools.Skills, "shared", logger),
 	}
 
 	cfg.Agent = AgentConfig{

@@ -683,47 +683,6 @@ func TestReconcileWithTools(t *testing.T) {
 			t.Errorf("spec.tools.skills[0].image = %q, want %q", p.Spec.Tools.Skills[0].Image, "registry.example.com/skills:latest")
 		}
 	})
-
-	t.Run("per-step tools set on run", func(t *testing.T) {
-		as := &fakeAlertSource{alerts: models.GettableAlerts{makeAlert("HighCPU", "abcdef1234567890", oldEnough)}}
-		rc := &fakeRunClient{}
-
-		cfg := config.Default()
-		cfg.AllowedReceivers = []string{"critical"}
-		cfg.Tools.Analysis = []agenticv1alpha1.SkillsSource{
-			{Image: "registry.example.com/analysis:latest", Paths: []string{"/skills/diagnostic"}},
-		}
-		cfg.Tools.Execution = []agenticv1alpha1.SkillsSource{
-			{Image: "registry.example.com/exec:latest", Paths: []string{"/skills/remediation"}},
-		}
-
-		a := testAdapter(as, rc, cfg)
-
-		a.reconcile(context.Background())
-
-		if len(rc.created) != 1 {
-			t.Fatalf("created %d runs, want 1", len(rc.created))
-		}
-		p := rc.created[0]
-		if p.Spec.Tools.IsZero() != true {
-			t.Errorf("expected zero spec.tools, got %+v", p.Spec.Tools)
-		}
-		if len(p.Spec.Analysis.Tools.Skills) != 1 {
-			t.Fatalf("analysis.tools.skills length = %d, want 1", len(p.Spec.Analysis.Tools.Skills))
-		}
-		if p.Spec.Analysis.Tools.Skills[0].Image != "registry.example.com/analysis:latest" {
-			t.Errorf("analysis.tools.skills[0].image = %q, want %q", p.Spec.Analysis.Tools.Skills[0].Image, "registry.example.com/analysis:latest")
-		}
-		if len(p.Spec.Execution.Tools.Skills) != 1 {
-			t.Fatalf("execution.tools.skills length = %d, want 1", len(p.Spec.Execution.Tools.Skills))
-		}
-		if p.Spec.Execution.Tools.Skills[0].Image != "registry.example.com/exec:latest" {
-			t.Errorf("execution.tools.skills[0].image = %q, want %q", p.Spec.Execution.Tools.Skills[0].Image, "registry.example.com/exec:latest")
-		}
-		if !p.Spec.Verification.Tools.IsZero() {
-			t.Errorf("expected zero verification.tools, got %+v", p.Spec.Verification.Tools)
-		}
-	})
 }
 
 func TestReconcileZeroDelays(t *testing.T) {

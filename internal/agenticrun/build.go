@@ -92,7 +92,7 @@ func BuildForTarget(a *models.GettableAlert, tools config.ToolsConfig, agent con
 	}
 	startsAt := time.Time(*a.StartsAt)
 
-	request, err := buildRequest(a, tools.Shared, tools.Analysis)
+	request, err := buildRequest(a, tools.Shared)
 	if err != nil {
 		return nil, err
 	}
@@ -100,16 +100,6 @@ func BuildForTarget(a *models.GettableAlert, tools config.ToolsConfig, agent con
 	analysis := agenticv1alpha1.AgenticRunStep{Agent: resolveAgent(agent.Analysis, agent.Default)}
 	execution := agenticv1alpha1.AgenticRunStep{Agent: resolveAgent(agent.Execution, agent.Default)}
 	verification := agenticv1alpha1.AgenticRunStep{Agent: resolveAgent(agent.Verification, agent.Default)}
-
-	if len(tools.Analysis) > 0 {
-		analysis.Tools = agenticv1alpha1.ToolsSpec{Skills: tools.Analysis}
-	}
-	if len(tools.Execution) > 0 {
-		execution.Tools = agenticv1alpha1.ToolsSpec{Skills: tools.Execution}
-	}
-	if len(tools.Verification) > 0 {
-		verification.Tools = agenticv1alpha1.ToolsSpec{Skills: tools.Verification}
-	}
 
 	p := &agenticv1alpha1.AgenticRun{
 		TypeMeta: metav1.TypeMeta{
@@ -218,14 +208,9 @@ func buildAnnotations(a *models.GettableAlert) map[string]string {
 }
 
 // buildRequest renders the embedded template with alert data for the analysis agent.
-func buildRequest(a *models.GettableAlert, sharedSkills, analysisSkills []agenticv1alpha1.SkillsSource) (string, error) {
+func buildRequest(a *models.GettableAlert, sharedSkills []agenticv1alpha1.SkillsSource) (string, error) {
 	var skillPaths []string
 	for _, s := range sharedSkills {
-		for _, p := range s.Paths {
-			skillPaths = append(skillPaths, "/app"+p)
-		}
-	}
-	for _, s := range analysisSkills {
 		for _, p := range s.Paths {
 			skillPaths = append(skillPaths, "/app"+p)
 		}
