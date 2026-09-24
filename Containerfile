@@ -10,7 +10,7 @@ RUN CGO_ENABLED=0 GOOS=linux go build -ldflags="-s -w" -o ./alerts-adapter ./cmd
 FROM registry.access.redhat.com/ubi9-micro:latest
 
 LABEL com.redhat.component="lightspeed-agentic-alerts-adapter" \
-      name="openshift-lightspeed-1/lightspeed-agentic-alerts-adapter" \
+      name="openshift-lightspeed/lightspeed-agentic-alerts-adapter-rhel9" \
       version="0.1.0" \
       release="1" \
       summary="Lightspeed Agentic Alerts Adapter" \
