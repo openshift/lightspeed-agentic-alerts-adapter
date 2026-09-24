@@ -221,15 +221,6 @@ func assertEmptyTools(t *testing.T, tc ToolsConfig) {
 	if len(tc.Shared) != 0 {
 		t.Errorf("Tools.Shared = %v, want empty", tc.Shared)
 	}
-	if len(tc.Analysis) != 0 {
-		t.Errorf("Tools.Analysis = %v, want empty", tc.Analysis)
-	}
-	if len(tc.Execution) != 0 {
-		t.Errorf("Tools.Execution = %v, want empty", tc.Execution)
-	}
-	if len(tc.Verification) != 0 {
-		t.Errorf("Tools.Verification = %v, want empty", tc.Verification)
-	}
 }
 
 func TestParseToolsConfig(t *testing.T) {
@@ -250,64 +241,6 @@ tools:
 			wantTools: ToolsConfig{
 				Shared: []agenticv1alpha1.SkillsSource{
 					{Image: "registry.example.com/skills:latest", Paths: []string{"/skills/prometheus"}},
-				},
-			},
-		},
-		{
-			name: "per-step skills only",
-			yaml: `
-analysis:
-  tools:
-    skills:
-      - image: registry.example.com/analysis:latest
-        paths:
-          - /skills/diagnostic
-execution:
-  tools:
-    skills:
-      - image: registry.example.com/exec:latest
-        paths:
-          - /skills/remediation
-verification:
-  tools:
-    skills:
-      - image: registry.example.com/verify:latest
-        paths:
-          - /skills/validation
-`,
-			wantTools: ToolsConfig{
-				Analysis: []agenticv1alpha1.SkillsSource{
-					{Image: "registry.example.com/analysis:latest", Paths: []string{"/skills/diagnostic"}},
-				},
-				Execution: []agenticv1alpha1.SkillsSource{
-					{Image: "registry.example.com/exec:latest", Paths: []string{"/skills/remediation"}},
-				},
-				Verification: []agenticv1alpha1.SkillsSource{
-					{Image: "registry.example.com/verify:latest", Paths: []string{"/skills/validation"}},
-				},
-			},
-		},
-		{
-			name: "shared and per-step skills combined",
-			yaml: `
-tools:
-  skills:
-    - image: registry.example.com/shared:latest
-      paths:
-        - /skills/common
-analysis:
-  tools:
-    skills:
-      - image: registry.example.com/analysis:latest
-        paths:
-          - /skills/diagnostic
-`,
-			wantTools: ToolsConfig{
-				Shared: []agenticv1alpha1.SkillsSource{
-					{Image: "registry.example.com/shared:latest", Paths: []string{"/skills/common"}},
-				},
-				Analysis: []agenticv1alpha1.SkillsSource{
-					{Image: "registry.example.com/analysis:latest", Paths: []string{"/skills/diagnostic"}},
 				},
 			},
 		},
@@ -356,42 +289,32 @@ tools:
 			wantTools: ToolsConfig{},
 		},
 		{
-			name: "per-step skills entry with empty paths skipped",
+			name: "shared skills entry with empty paths skipped",
 			yaml: `
-analysis:
-  tools:
-    skills:
-      - image: registry.example.com/skills:latest
-        paths: []
+tools:
+  skills:
+    - image: registry.example.com/skills:latest
+      paths: []
 `,
 			wantTools: ToolsConfig{},
 		},
 		{
-			name: "mix of valid and invalid entries across levels",
+			name: "mix of valid and invalid shared skills",
 			yaml: `
 tools:
   skills:
     - image: ""
       paths:
         - /skills/bad
+    - image: registry.example.com/no-paths:latest
+      paths: []
     - image: registry.example.com/good:latest
       paths:
         - /skills/good
-execution:
-  tools:
-    skills:
-      - image: registry.example.com/no-paths:latest
-        paths: []
-      - image: registry.example.com/exec:latest
-        paths:
-          - /skills/remediation
 `,
 			wantTools: ToolsConfig{
 				Shared: []agenticv1alpha1.SkillsSource{
 					{Image: "registry.example.com/good:latest", Paths: []string{"/skills/good"}},
-				},
-				Execution: []agenticv1alpha1.SkillsSource{
-					{Image: "registry.example.com/exec:latest", Paths: []string{"/skills/remediation"}},
 				},
 			},
 		},
@@ -407,9 +330,6 @@ execution:
 			}
 
 			assertSkillsEqual(t, "Tools.Shared", cfg.Tools.Shared, tt.wantTools.Shared)
-			assertSkillsEqual(t, "Tools.Analysis", cfg.Tools.Analysis, tt.wantTools.Analysis)
-			assertSkillsEqual(t, "Tools.Execution", cfg.Tools.Execution, tt.wantTools.Execution)
-			assertSkillsEqual(t, "Tools.Verification", cfg.Tools.Verification, tt.wantTools.Verification)
 		})
 	}
 }

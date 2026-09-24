@@ -374,7 +374,7 @@ The `alerts-adapter-config` ConfigMap is mounted as a volume at `/etc/alerts-ada
 | `filtering.allowedReceivers` | `[]` | Receiver allowlist — only alerts routed to at least one of these receivers are processed (case-insensitive). Empty by default; no AgenticRuns are created until receivers are explicitly configured |
 | `deduplication.ignoredLabels` | `[pod, instance, endpoint, uid]` | Labels stripped before computing the stable fingerprint for dedup matching. When set, fully replaces the defaults. Set to `[]` to include all labels |
 
-Tools/skills configuration is also supported — see [README.md](README.md#configuration) for the full ConfigMap example including shared and per-step skills.
+Tools/skills configuration is also supported — see [README.md](README.md#configuration) for the full ConfigMap example including run-level skills.
 
 ### Constants
 

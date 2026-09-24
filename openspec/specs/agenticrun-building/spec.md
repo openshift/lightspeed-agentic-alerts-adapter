@@ -62,7 +62,7 @@ The system SHALL sanitize alert values to conform to Kubernetes naming and label
 - **THEN** those characters are replaced with hyphens and leading/trailing non-alphanumeric characters are trimmed
 
 ### Requirement: Render a structured request from alert data
-The system SHALL render the `spec.request` field using an embedded Go template that includes the alert name, severity, namespace, description, and runbook URL. All alert-sourced values SHALL be sanitized before template rendering by stripping Unicode control characters (except newline), Unicode format characters, and backtick runs of 3 or more. Only allow-listed fields SHALL be passed to the template; the full Labels map SHALL NOT be included in the template data. The skill hint SHALL include paths from both shared skills and analysis-level skills.
+The system SHALL render the `spec.request` field using an embedded Go template that includes the alert name, severity, namespace, description, and runbook URL. All alert-sourced values SHALL be sanitized before template rendering by stripping Unicode control characters (except newline), Unicode format characters, and backtick runs of 3 or more. Only allow-listed fields SHALL be passed to the template; the full Labels map SHALL NOT be included in the template data. The skill hint SHALL include paths from run-level skills.
 
 #### Scenario: Alert with all annotation fields populated
 - **WHEN** the alert has summary and description annotations
@@ -92,20 +92,12 @@ The system SHALL render the `spec.request` field using an embedded Go template t
 - **WHEN** shared skills are configured with paths
 - **THEN** the rendered request SHALL contain the skill hint listing those paths (prefixed with `/app`)
 
-#### Scenario: Skill hint includes analysis-level skill paths
-- **WHEN** analysis-level skills are configured with paths but no shared skills are configured
-- **THEN** the rendered request SHALL contain the skill hint listing the analysis skill paths (prefixed with `/app`)
-
-#### Scenario: Skill hint includes both shared and analysis skill paths
-- **WHEN** both shared skills and analysis-level skills are configured with paths
-- **THEN** the rendered request SHALL contain the skill hint listing paths from both sources (each prefixed with `/app`)
-
 #### Scenario: No skill hint when no skills configured
-- **WHEN** neither shared skills nor analysis-level skills are configured
+- **WHEN** no run-level skills are configured
 - **THEN** the rendered request SHALL contain the generic investigation instruction instead of a skill hint
 
-### Requirement: Configure all three workflow steps with tools
-The system SHALL set the analysis, execution, and verification steps on the AgenticRun, each referencing the `default` agent. The system SHALL support shared tools and per-step tool overrides.
+### Requirement: Configure all three workflow steps with run-level tools
+The system SHALL set the analysis, execution, and verification steps on the AgenticRun, each referencing the `default` agent. Configured skills SHALL be set on `spec.tools` for all steps.
 
 #### Scenario: Built AgenticRun has full workflow
 - **WHEN** an AgenticRun is built from any alert
@@ -115,17 +107,9 @@ The system SHALL set the analysis, execution, and verification steps on the Agen
 - **WHEN** an AgenticRun is built and shared skills configuration is provided with one or more skills entries
 - **THEN** `spec.tools.skills` SHALL contain the configured skills entries with their images and paths
 
-#### Scenario: Built AgenticRun with per-step skills configured
-- **WHEN** an AgenticRun is built and per-step skills are configured for analysis, execution, or verification
-- **THEN** the corresponding `spec.{step}.tools.skills` SHALL contain the configured skills entries for that step
-
-#### Scenario: Built AgenticRun with both shared and per-step skills
-- **WHEN** an AgenticRun is built with both shared skills and per-step skills for a given step
-- **THEN** `spec.tools.skills` SHALL contain the shared skills AND `spec.{step}.tools.skills` SHALL contain the per-step skills for steps that have overrides
-
 #### Scenario: Built AgenticRun with no tools configured
-- **WHEN** an AgenticRun is built and no tools configuration is provided (all slices empty)
-- **THEN** `spec.tools` SHALL be omitted from the AgenticRun (zero value) and no per-step tools SHALL be set
+- **WHEN** an AgenticRun is built and no run-level skills are configured
+- **THEN** `spec.tools` SHALL be omitted from the AgenticRun (zero value)
 
 ### Requirement: List existing AgenticRuns by source
 The system SHALL list AgenticRun CRs filtered by the `agentic.openshift.io/source=alertmanager` label to support deduplication queries.

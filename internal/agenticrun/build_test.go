@@ -379,50 +379,6 @@ func TestBuildRequestWithSkillPaths(t *testing.T) {
 			}
 		}
 	})
-
-	t.Run("analysis-only skills lists paths in hint", func(t *testing.T) {
-		tc := config.ToolsConfig{
-			Analysis: []agenticv1alpha1.SkillsSource{
-				{Image: "registry.example.com/analysis:latest", Paths: []string{"/skills/diagnostic"}},
-			},
-		}
-		p, err := Build(a, tc, config.AgentConfig{}, nil, RunNamespace)
-		if err != nil {
-			t.Fatalf("unexpected error: %v", err)
-		}
-		for _, want := range []string{
-			"Investigate using the skill at",
-			"/app/skills/diagnostic",
-		} {
-			if !strings.Contains(p.Spec.Request, want) {
-				t.Errorf("request does not contain %q\nfull request:\n%s", want, p.Spec.Request)
-			}
-		}
-	})
-
-	t.Run("shared and analysis skills lists all paths in hint", func(t *testing.T) {
-		tc := config.ToolsConfig{
-			Shared: []agenticv1alpha1.SkillsSource{
-				{Image: "registry.example.com/shared:latest", Paths: []string{"/skills/common"}},
-			},
-			Analysis: []agenticv1alpha1.SkillsSource{
-				{Image: "registry.example.com/analysis:latest", Paths: []string{"/skills/diagnostic"}},
-			},
-		}
-		p, err := Build(a, tc, config.AgentConfig{}, nil, RunNamespace)
-		if err != nil {
-			t.Fatalf("unexpected error: %v", err)
-		}
-		for _, want := range []string{
-			"Investigate using the skill at",
-			"/app/skills/common",
-			"/app/skills/diagnostic",
-		} {
-			if !strings.Contains(p.Spec.Request, want) {
-				t.Errorf("request does not contain %q\nfull request:\n%s", want, p.Spec.Request)
-			}
-		}
-	})
 }
 
 func TestBuildRequestWithoutRunbook(t *testing.T) {
@@ -760,15 +716,6 @@ func TestBuildWithTools(t *testing.T) {
 		if !p.Spec.Tools.IsZero() {
 			t.Errorf("expected zero spec.tools, got %+v", p.Spec.Tools)
 		}
-		if !p.Spec.Analysis.Tools.IsZero() {
-			t.Errorf("expected zero analysis.tools, got %+v", p.Spec.Analysis.Tools)
-		}
-		if !p.Spec.Execution.Tools.IsZero() {
-			t.Errorf("expected zero execution.tools, got %+v", p.Spec.Execution.Tools)
-		}
-		if !p.Spec.Verification.Tools.IsZero() {
-			t.Errorf("expected zero verification.tools, got %+v", p.Spec.Verification.Tools)
-		}
 	})
 
 	t.Run("shared skills only sets spec.tools", func(t *testing.T) {
@@ -787,92 +734,11 @@ func TestBuildWithTools(t *testing.T) {
 		if p.Spec.Tools.Skills[0].Image != "registry.example.com/skills:latest" {
 			t.Errorf("spec.tools.skills[0].image = %q, want %q", p.Spec.Tools.Skills[0].Image, "registry.example.com/skills:latest")
 		}
-		if !p.Spec.Analysis.Tools.IsZero() {
-			t.Errorf("expected zero analysis.tools, got %+v", p.Spec.Analysis.Tools)
-		}
-		if !p.Spec.Execution.Tools.IsZero() {
-			t.Errorf("expected zero execution.tools, got %+v", p.Spec.Execution.Tools)
-		}
-		if !p.Spec.Verification.Tools.IsZero() {
-			t.Errorf("expected zero verification.tools, got %+v", p.Spec.Verification.Tools)
-		}
 	})
 
-	t.Run("per-step skills only sets step tools", func(t *testing.T) {
-		tc := config.ToolsConfig{
-			Analysis: []agenticv1alpha1.SkillsSource{
-				{Image: "registry.example.com/analysis:latest", Paths: []string{"/skills/diagnostic"}},
-			},
-			Execution: []agenticv1alpha1.SkillsSource{
-				{Image: "registry.example.com/exec:latest", Paths: []string{"/skills/remediation"}},
-			},
-			Verification: []agenticv1alpha1.SkillsSource{
-				{Image: "registry.example.com/verify:latest", Paths: []string{"/skills/validation"}},
-			},
-		}
-		p, err := Build(a, tc, config.AgentConfig{}, nil, RunNamespace)
-		if err != nil {
-			t.Fatalf("unexpected error: %v", err)
-		}
-		if !p.Spec.Tools.IsZero() {
-			t.Errorf("expected zero spec.tools, got %+v", p.Spec.Tools)
-		}
-		if len(p.Spec.Analysis.Tools.Skills) != 1 {
-			t.Fatalf("analysis.tools.skills length = %d, want 1", len(p.Spec.Analysis.Tools.Skills))
-		}
-		if p.Spec.Analysis.Tools.Skills[0].Image != "registry.example.com/analysis:latest" {
-			t.Errorf("analysis.tools.skills[0].image = %q, want %q", p.Spec.Analysis.Tools.Skills[0].Image, "registry.example.com/analysis:latest")
-		}
-		if len(p.Spec.Execution.Tools.Skills) != 1 {
-			t.Fatalf("execution.tools.skills length = %d, want 1", len(p.Spec.Execution.Tools.Skills))
-		}
-		if p.Spec.Execution.Tools.Skills[0].Image != "registry.example.com/exec:latest" {
-			t.Errorf("execution.tools.skills[0].image = %q, want %q", p.Spec.Execution.Tools.Skills[0].Image, "registry.example.com/exec:latest")
-		}
-		if len(p.Spec.Verification.Tools.Skills) != 1 {
-			t.Fatalf("verification.tools.skills length = %d, want 1", len(p.Spec.Verification.Tools.Skills))
-		}
-		if p.Spec.Verification.Tools.Skills[0].Image != "registry.example.com/verify:latest" {
-			t.Errorf("verification.tools.skills[0].image = %q, want %q", p.Spec.Verification.Tools.Skills[0].Image, "registry.example.com/verify:latest")
-		}
-	})
-
-	t.Run("shared and per-step skills combined", func(t *testing.T) {
+	t.Run("run-level skills preserve agent", func(t *testing.T) {
 		tc := config.ToolsConfig{
 			Shared: []agenticv1alpha1.SkillsSource{
-				{Image: "registry.example.com/shared:latest", Paths: []string{"/skills/common"}},
-			},
-			Analysis: []agenticv1alpha1.SkillsSource{
-				{Image: "registry.example.com/analysis:latest", Paths: []string{"/skills/diagnostic"}},
-			},
-		}
-		p, err := Build(a, tc, config.AgentConfig{}, nil, RunNamespace)
-		if err != nil {
-			t.Fatalf("unexpected error: %v", err)
-		}
-		if len(p.Spec.Tools.Skills) != 1 {
-			t.Fatalf("spec.tools.skills length = %d, want 1", len(p.Spec.Tools.Skills))
-		}
-		if p.Spec.Tools.Skills[0].Image != "registry.example.com/shared:latest" {
-			t.Errorf("spec.tools.skills[0].image = %q, want %q", p.Spec.Tools.Skills[0].Image, "registry.example.com/shared:latest")
-		}
-		if len(p.Spec.Analysis.Tools.Skills) != 1 {
-			t.Fatalf("analysis.tools.skills length = %d, want 1", len(p.Spec.Analysis.Tools.Skills))
-		}
-		if p.Spec.Analysis.Tools.Skills[0].Image != "registry.example.com/analysis:latest" {
-			t.Errorf("analysis.tools.skills[0].image = %q, want %q", p.Spec.Analysis.Tools.Skills[0].Image, "registry.example.com/analysis:latest")
-		}
-		if !p.Spec.Execution.Tools.IsZero() {
-			t.Errorf("expected zero execution.tools, got %+v", p.Spec.Execution.Tools)
-		}
-		if !p.Spec.Verification.Tools.IsZero() {
-			t.Errorf("expected zero verification.tools, got %+v", p.Spec.Verification.Tools)
-		}
-	})
-
-	t.Run("per-step skills preserves agent", func(t *testing.T) {
-		tc := config.ToolsConfig{
-			Analysis: []agenticv1alpha1.SkillsSource{
 				{Image: "registry.example.com/analysis:latest", Paths: []string{"/skills/diagnostic"}},
 			},
 		}
