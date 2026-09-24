@@ -140,6 +140,32 @@ func TestNewTargetsMulticluster(t *testing.T) {
 	}
 }
 
+func TestNewTargetsMulticlusterAllowsNoInitialTargets(t *testing.T) {
+	t.Setenv("ALERTMANAGER_URL", "")
+
+	scheme := runtime.NewScheme()
+	if err := corev1.AddToScheme(scheme); err != nil {
+		t.Fatalf("adding core scheme: %v", err)
+	}
+	if err := hubv1alpha1.AddToScheme(scheme); err != nil {
+		t.Fatalf("adding hub scheme: %v", err)
+	}
+
+	targets, err := newTargets(
+		context.Background(),
+		fake.NewClientBuilder().WithScheme(scheme).Build(),
+		"test-namespace",
+		true,
+		slog.New(slog.NewTextHandler(io.Discard, nil)),
+	)
+	if err != nil {
+		t.Fatalf("newTargets() error = %v", err)
+	}
+	if len(targets) != 0 {
+		t.Errorf("len(targets) = %d, want 0", len(targets))
+	}
+}
+
 func TestNewTargetsSkipsUnlabeledAndInvalidSpokes(t *testing.T) {
 	t.Setenv("ALERTMANAGER_URL", "")
 
