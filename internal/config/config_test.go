@@ -334,6 +334,26 @@ tools:
 	}
 }
 
+func TestOperatorProvidedSkillsImage(t *testing.T) {
+	const official = "registry.example.com/agentic-skills@sha256:0123456789abcdef"
+	t.Setenv(AgenticSkillsImageEnv, official)
+	path := writeConfigFile(t, `
+tools:
+  skills:
+    - paths: [/skills/cluster-troubleshoot/investigate-alert]
+    - image: registry.example.com/custom-skills:latest
+      paths: [/skills/custom]
+`)
+	cfg, err := LoadFromFile(path, quietLogger())
+	if err != nil {
+		t.Fatal(err)
+	}
+	assertSkillsEqual(t, "Tools.Shared", cfg.Tools.Shared, []agenticv1alpha1.SkillsSource{
+		{Image: official, Paths: []string{"/skills/cluster-troubleshoot/investigate-alert"}},
+		{Image: "registry.example.com/custom-skills:latest", Paths: []string{"/skills/custom"}},
+	})
+}
+
 func TestParseAllowedReceivers(t *testing.T) {
 	tests := []struct {
 		name string
