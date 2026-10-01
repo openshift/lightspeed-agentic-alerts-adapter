@@ -94,7 +94,7 @@ Skills (OCI images with runbook paths) are configured at the run level and are a
 |---|---|
 | `tools.skills` | Skills applied to all configured steps |
 
-Each skills entry requires `image` (OCI image reference) and `paths` (list of paths within the image).
+Each skills entry requires `paths` (list of paths within the image). When `image` is omitted, the adapter uses `AGENTIC_SKILLS_IMAGE` injected by the Lightspeed operator. Explicit `image` values override that default; without either an explicit image or the env var, the entry is skipped.
 
 #### Agents
 
@@ -129,9 +129,8 @@ data:
         - uid
     tools:
       skills:
-        - image: quay.io/example/shared-runbooks:latest
-          paths:
-            - /runbooks/common
+        - paths:
+            - /skills/cluster-troubleshoot/investigate-alert
 ```
 
 ## Documentation

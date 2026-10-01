@@ -57,9 +57,9 @@ data:
 
     # tools: shared skills for all workflow steps (maps to spec.tools on the AgenticRun).
     # When configured, every AgenticRun created by the adapter includes these skills.
-    # Omit to create AgenticRuns with no tools.
+    # Omit to create AgenticRuns with no tools. The image defaults to the
+    # operator-injected AGENTIC_SKILLS_IMAGE; set image to override it.
     tools:
       skills:
-        - image: quay.io/openshiftanalytics/agentic-skills:latest
-          paths:
+        - paths:
             - /skills/cluster-troubleshoot/investigate-alert
