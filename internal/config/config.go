@@ -16,7 +16,8 @@ const (
 	DefaultPreRunDelay  = 0
 	DefaultPostRunDelay = 1 * time.Hour
 
-	DefaultConfigPath = "/etc/alerts-adapter/config.yaml"
+	DefaultConfigPath     = "/etc/alerts-adapter/config.yaml"
+	AgenticSkillsImageEnv = "AGENTIC_SKILLS_IMAGE"
 )
 
 var DefaultIgnoredLabels = []string{"pod", "instance", "endpoint", "uid"}
@@ -170,7 +171,7 @@ func LoadFromFile(path string, logger *slog.Logger) (Config, error) {
 	}
 
 	cfg.Tools = ToolsConfig{
-		Shared: parseSkills(cf.Tools.Skills, "shared", logger),
+		Shared: parseSkills(cf.Tools.Skills, "shared", os.Getenv(AgenticSkillsImageEnv), logger),
 	}
 
 	cfg.Agent = AgentConfig{
@@ -183,11 +184,15 @@ func LoadFromFile(path string, logger *slog.Logger) (Config, error) {
 	return cfg, nil
 }
 
-func parseSkills(entries []skillsEntry, step string, logger *slog.Logger) []agenticv1alpha1.SkillsSource {
+func parseSkills(entries []skillsEntry, step, defaultImage string, logger *slog.Logger) []agenticv1alpha1.SkillsSource {
 	var skills []agenticv1alpha1.SkillsSource
 	for _, e := range entries {
-		if e.Image == "" {
-			logger.Warn("skills entry missing image, skipping", "step", step)
+		image := e.Image
+		if image == "" {
+			image = defaultImage
+		}
+		if image == "" {
+			logger.Error("skills entry missing image and no default is configured, skipping", "step", step)
 			continue
 		}
 		if len(e.Paths) == 0 {
@@ -195,7 +200,7 @@ func parseSkills(entries []skillsEntry, step string, logger *slog.Logger) []agen
 			continue
 		}
 		skills = append(skills, agenticv1alpha1.SkillsSource{
-			Image: e.Image,
+			Image: image,
 			Paths: e.Paths,
 		})
 	}

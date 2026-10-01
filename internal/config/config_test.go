@@ -1,10 +1,12 @@
 package config
 
 import (
+	"bytes"
 	"io"
 	"log/slog"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -331,6 +333,54 @@ tools:
 
 			assertSkillsEqual(t, "Tools.Shared", cfg.Tools.Shared, tt.wantTools.Shared)
 		})
+	}
+}
+
+func TestOperatorProvidedSkillsImage(t *testing.T) {
+	const official = "registry.example.com/agentic-skills@sha256:0123456789abcdef"
+	t.Setenv(AgenticSkillsImageEnv, official)
+	path := writeConfigFile(t, `
+tools:
+  skills:
+    - paths: [/skills/cluster-troubleshoot/investigate-alert]
+    - image: registry.example.com/custom-skills:latest
+      paths: [/skills/custom]
+`)
+	cfg, err := LoadFromFile(path, quietLogger())
+	if err != nil {
+		t.Fatal(err)
+	}
+	assertSkillsEqual(t, "Tools.Shared", cfg.Tools.Shared, []agenticv1alpha1.SkillsSource{
+		{Image: official, Paths: []string{"/skills/cluster-troubleshoot/investigate-alert"}},
+		{Image: "registry.example.com/custom-skills:latest", Paths: []string{"/skills/custom"}},
+	})
+}
+
+func TestSkillsWithoutDefaultImage(t *testing.T) {
+	// Ensure the inherited environment cannot mask a missing operator image.
+	t.Setenv(AgenticSkillsImageEnv, "")
+	if err := os.Unsetenv(AgenticSkillsImageEnv); err != nil {
+		t.Fatal(err)
+	}
+	path := writeConfigFile(t, `
+tools:
+  skills:
+    - paths: [/skills/cluster-troubleshoot/investigate-alert]
+    - image: registry.example.com/custom-skills:latest
+      paths: [/skills/custom]
+`)
+	var logs bytes.Buffer
+	logger := slog.New(slog.NewTextHandler(&logs, nil))
+	cfg, err := LoadFromFile(path, logger)
+	if err != nil {
+		t.Fatal(err)
+	}
+	assertSkillsEqual(t, "Tools.Shared", cfg.Tools.Shared, []agenticv1alpha1.SkillsSource{
+		{Image: "registry.example.com/custom-skills:latest", Paths: []string{"/skills/custom"}},
+	})
+	if !strings.Contains(logs.String(), "level=ERROR") ||
+		!strings.Contains(logs.String(), "skills entry missing image and no default is configured, skipping") {
+		t.Errorf("expected error log for skipped skills entry, got %q", logs.String())
 	}
 }
 

@@ -1,6 +1,9 @@
 package agenticrun
 
 import (
+	"log/slog"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -34,6 +37,26 @@ func makeAlert(alertName, namespace, fingerprint, severity string) *models.Getta
 		Status: &models.AlertStatus{
 			State: strPtr("active"),
 		},
+	}
+}
+
+func TestBuildUsesOperatorSkillsImage(t *testing.T) {
+	const official = "registry.example.com/agentic-skills@sha256:0123456789abcdef"
+	t.Setenv(config.AgenticSkillsImageEnv, official)
+	path := filepath.Join(t.TempDir(), "config.yaml")
+	if err := os.WriteFile(path, []byte("tools:\n  skills:\n    - paths: [/skills/cluster-troubleshoot/investigate-alert]\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	cfg, err := config.LoadFromFile(path, slog.Default())
+	if err != nil {
+		t.Fatal(err)
+	}
+	run, err := Build(makeAlert("KubePodCrashLooping", "production", "abcdef1234567890", "critical"), cfg.Tools, cfg.Agent, cfg.IgnoredLabels, RunNamespace)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(run.Spec.Tools.Skills) != 1 || run.Spec.Tools.Skills[0].Image != official {
+		t.Fatalf("AgenticRun tools.skills = %+v, want image %s", run.Spec.Tools.Skills, official)
 	}
 }
 

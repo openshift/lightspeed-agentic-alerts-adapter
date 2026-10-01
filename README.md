@@ -94,7 +94,13 @@ Skills (OCI images with runbook paths) are configured at the run level and are a
 |---|---|
 | `tools.skills` | Skills applied to all configured steps |
 
-Each skills entry requires `image` (OCI image reference) and `paths` (list of paths within the image).
+Each skills entry requires `paths` (list of paths within the image). When `image` is omitted, the adapter uses `AGENTIC_SKILLS_IMAGE` from its environment. Explicit `image` values override that default; without either an explicit image or the env var, the entry is skipped with an error log (the adapter still starts). The direct-deployment sample ConfigMap includes an explicit image, so it does not exercise the default until you remove that field.
+
+#### Testing the operator-provided skills image
+
+- Run `make test` to cover explicit overrides, missing `AGENTIC_SKILLS_IMAGE`, and the image written to an `AgenticRun`.
+- For an in-cluster check, use an adapter image built from this PR and install the agentic operator/`AgenticRun` CRD. The **classic** Lightspeed operator [PR #2133](https://github.com/openshift/lightspeed-operator/pull/2133) injects the env var into its adapter deployment; until that PR is deployed, set `AGENTIC_SKILLS_IMAGE` on the adapter Deployment yourself. The operator currently has no pinned skills related image, so pass a verified, pullable image digest with `--agentic-skills-image` when testing the operator path.
+- Configure a skill entry with `paths` but no `image`, add an allowed Alertmanager receiver, and trigger a firing alert routed to that receiver. Inspect the resulting `AgenticRun.spec.tools.skills` for the supplied digest and paths; then check the agentic operator's created workload and events for the skill-image pull and mount. For a negative check, remove the env var, restart the adapter, and verify it logs an error and omits that skill from newly created runs. Use a new alert instance to avoid deduplication.
 
 #### Agents
 
@@ -129,9 +135,8 @@ data:
         - uid
     tools:
       skills:
-        - image: quay.io/example/shared-runbooks:latest
-          paths:
-            - /runbooks/common
+        - paths:
+            - /skills/cluster-troubleshoot/investigate-alert
 ```
 
 ## Documentation

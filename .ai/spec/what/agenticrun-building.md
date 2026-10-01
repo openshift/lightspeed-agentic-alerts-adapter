@@ -51,7 +51,7 @@ Translates AlertManager alerts into AgenticRun custom resources with determinist
 ### Workflow Steps
 
 27. The adapter SHALL set analysis, execution, and verification steps. Each step SHALL select its agent using the precedence in [configuration](configuration.md#agent-selection): step override, shared override, then `default`.
-28. When shared skills are configured, `spec.tools.skills` SHALL contain the configured entries with their images and paths.
+28. When valid shared skills are configured, `spec.tools.skills` SHALL contain only entries with resolved images and paths. Entries without an explicit image SHALL use `AGENTIC_SKILLS_IMAGE` when set, as defined in [configuration](configuration.md#skills-configuration).
 29. When no run-level skills are configured, `spec.tools` SHALL be omitted (zero value).
 
 ### AgenticRun CRUD
