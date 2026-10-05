@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"crypto/sha256"
 	_ "embed"
+	"encoding/binary"
 	"encoding/hex"
 	"fmt"
 	"hash/fnv"
@@ -304,25 +305,29 @@ func truncateDNS(s string, maxLen int) string {
 }
 
 // StableFingerprint computes a stable hash from alert labels after removing
-// ignored labels. The remaining key=value pairs are sorted lexicographically,
-// joined with a null byte separator, and hashed with FNV-64a truncated to 8
-// hex characters.
+// ignored labels. The remaining keys are sorted lexicographically, then each
+// key and value is length-prefixed before hashing with FNV-64a truncated to
+// 8 hex characters.
 func StableFingerprint(labels map[string]string, ignoredLabels []string) string {
-	pairs := make([]string, 0, len(labels))
-	for k, v := range labels {
+	keys := make([]string, 0, len(labels))
+	for k := range labels {
 		if slices.Contains(ignoredLabels, k) {
 			continue
 		}
-		pairs = append(pairs, k+"="+v)
+		keys = append(keys, k)
 	}
-	sort.Strings(pairs)
+	sort.Strings(keys)
 
 	h := fnv.New64a()
-	for i, p := range pairs {
-		if i > 0 {
-			h.Write([]byte{0})
-		}
-		h.Write([]byte(p))
+	var length [binary.MaxVarintLen64]byte
+	for _, k := range keys {
+		v := labels[k]
+		n := binary.PutUvarint(length[:], uint64(len(k)))
+		h.Write(length[:n])
+		h.Write([]byte(k))
+		n = binary.PutUvarint(length[:], uint64(len(v)))
+		h.Write(length[:n])
+		h.Write([]byte(v))
 	}
 
 	return fmt.Sprintf("%016x", h.Sum64())[:fingerprintLen]
