@@ -16,7 +16,7 @@ Translates AlertManager alerts into AgenticRun custom resources with determinist
 
 ### Stable Fingerprint (Scope Hashing)
 
-7. The adapter SHALL compute a stable fingerprint by removing a configurable set of ignored labels from the alert's label set, sorting the remaining `key=value` pairs lexicographically, joining them with a null byte (`\0`) separator, and hashing with FNV-64a truncated to 8 hex characters.
+7. The adapter SHALL compute a stable fingerprint by removing a configurable set of ignored labels from the alert's label set and sorting the remaining keys lexicographically. For each key in that order, it SHALL hash the unsigned base-128 varint of the key's byte length, the key bytes, the unsigned base-128 varint of the value's byte length, and the value bytes, in that order, using FNV-64a. The fingerprint SHALL be the first 8 characters of the 16-character lowercase hexadecimal hash.
 8. Two alerts differing only in ignored labels (e.g., different pod names) SHALL produce the same stable fingerprint.
 9. Non-ignored labels SHALL contribute to the stable fingerprint. The eight-character hash is not a unique identifier; collisions are possible.
 10. When the ignored labels list is empty, all alert labels SHALL be included in the hash.

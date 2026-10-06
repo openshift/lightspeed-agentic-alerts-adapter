@@ -754,7 +754,7 @@ func TestStableFingerprint(t *testing.T) {
 		labels := map[string]string{
 			"alertname": "KubePodCrashLooping",
 			"namespace": "myns",
-			"pod":       "app-abc123",
+			"pod":       "app-abc123\x00extra",
 			"container": "app",
 		}
 		fp := StableFingerprint(labels, []string{"pod", "instance", "endpoint", "uid"})
@@ -835,6 +835,51 @@ func TestStableFingerprint(t *testing.T) {
 		fp2 := StableFingerprint(labels, []string{"pod"})
 		if fp1 != fp2 {
 			t.Errorf("fingerprints differ across calls: %s vs %s", fp1, fp2)
+		}
+	})
+
+	t.Run("embedded separators do not merge distinct label sets", func(t *testing.T) {
+		tests := []struct {
+			name   string
+			first  map[string]string
+			second map[string]string
+		}{
+			{
+				name:   "null byte in value",
+				first:  map[string]string{"a": "x\x00b=y"},
+				second: map[string]string{"a": "x", "b": "y"},
+			},
+			{
+				name:   "null byte in alert label value",
+				first:  map[string]string{"alertname": "X", "x": "v\x00y=w"},
+				second: map[string]string{"alertname": "X", "x": "v", "y": "w"},
+			},
+			{
+				name:   "equals sign in key",
+				first:  map[string]string{"a=b": "x"},
+				second: map[string]string{"a": "b=x"},
+			},
+		}
+
+		for _, tt := range tests {
+			t.Run(tt.name, func(t *testing.T) {
+				first := StableFingerprint(tt.first, nil)
+				second := StableFingerprint(tt.second, nil)
+				if first == second {
+					t.Errorf("distinct label sets have the same fingerprint %s", first)
+				}
+			})
+		}
+	})
+
+	t.Run("independent of map insertion order", func(t *testing.T) {
+		first := map[string]string{"alertname": "X", "x": "v\x00y=w"}
+		second := make(map[string]string)
+		second["x"] = "v\x00y=w"
+		second["alertname"] = "X"
+
+		if got, want := StableFingerprint(second, nil), StableFingerprint(first, nil); got != want {
+			t.Errorf("fingerprints differ by insertion order: %s vs %s", got, want)
 		}
 	})
 }
