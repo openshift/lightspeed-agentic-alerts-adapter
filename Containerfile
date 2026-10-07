@@ -1,4 +1,4 @@
-FROM registry.redhat.io/ubi9/go-toolset:9.8-1790174511 AS builder
+FROM registry.redhat.io/ubi9/go-toolset:9.8-1790174511@sha256:0a4666f7a4eb0644c97a73cba198eb268691b270d97831822689e7a2088f87be AS builder
 
 COPY go.mod go.sum* ./
 RUN go mod download
@@ -7,7 +7,7 @@ COPY cmd/ cmd/
 COPY internal/ internal/
 RUN CGO_ENABLED=0 GOOS=linux go build -ldflags="-s -w" -o ./alerts-adapter ./cmd/alerts-adapter
 
-FROM registry.access.redhat.com/ubi9-micro:latest
+FROM registry.access.redhat.com/ubi9-micro:9.8-1789345812@sha256:7a0454cbd9bd847e8f6a63b6f0254a6efbeb6e0ed71a5d824a4f6cccbe626650
 
 LABEL com.redhat.component="lightspeed-agentic-alerts-adapter" \
       name="openshift-lightspeed/lightspeed-agentic-alerts-adapter-rhel9" \
