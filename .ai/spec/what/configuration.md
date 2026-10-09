@@ -42,10 +42,10 @@ The adapter reads settings from `/etc/alerts-adapter/config.yaml` once at startu
 
 ### Skills Configuration
 
-18. Each optional `tools.skills` entry SHALL provide an OCI image and paths within that image. Valid entries SHALL map to `spec.tools.skills` on generated AgenticRuns.
+18. Each optional `tools.skills` entry SHALL provide paths within an OCI image. The adapter SHALL resolve the image from the entry's non-empty `image` first, otherwise from `AGENTIC_SKILLS_IMAGE` read at startup. Valid resolved entries SHALL map to `spec.tools.skills` on generated AgenticRuns. An explicit image SHALL override the environment default.
 19. An absent `tools` key SHALL produce empty skills without an error.
-20. An entry with an empty `image` SHALL be skipped with a warning.
-21. An entry with a non-empty `image` but an empty `paths` list SHALL be skipped with a warning.
+20. An entry with neither an explicit image nor a non-empty `AGENTIC_SKILLS_IMAGE` SHALL be skipped with an Error-level log; this SHALL NOT fail config loading or prevent valid entries from being used.
+21. An entry with a resolved image but an empty `paths` list SHALL be skipped with a warning.
 22. A list containing valid and invalid entries SHALL retain the valid entries.
 
 ### Agent Selection
@@ -64,8 +64,9 @@ The adapter reads settings from `/etc/alerts-adapter/config.yaml` once at startu
 | `filtering.allowedReceivers` | `[]` | Receiver allowlist; empty skips every alert |
 | `allowedReceivers` | (none) | Older form; the nested field takes precedence |
 | `deduplication.ignoredLabels` | `[pod, instance, endpoint, uid]` | Labels excluded from the group fingerprint |
-| `tools.skills[].image` | (none) | OCI image containing skills |
+| `tools.skills[].image` | `AGENTIC_SKILLS_IMAGE` when omitted | OCI image containing skills; explicit values override the environment |
 | `tools.skills[].paths` | (none) | Source paths within the skill image |
+| `AGENTIC_SKILLS_IMAGE` | (none) | Optional process environment default for entries without an image; does not create skills entries by itself |
 | `agent.default` | `default` through fallback | Shared agent name |
 | `agent.analysis` | Shared fallback | Analysis agent override |
 | `agent.execution` | Shared fallback | Execution agent override |
@@ -74,6 +75,6 @@ The adapter reads settings from `/etc/alerts-adapter/config.yaml` once at startu
 
 ## Deployment Integration
 
-The classic Lightspeed operator enables the local adapter through `OLSConfig.spec.ols.deployment.alertsAdapter.configMapRef`. It mounts that user-managed ConfigMap when present and restarts the pod on configuration changes. The hub mounts its own `hub-alerts-adapter-config` ConfigMap. The adapter process does not select a ConfigMap by name or read it through the Kubernetes API.
+The classic Lightspeed operator enables the local adapter through `OLSConfig.spec.ols.deployment.alertsAdapter.configMapRef`. It mounts that user-managed ConfigMap when present and restarts the pod on configuration changes. The hub mounts its own `hub-alerts-adapter-config` ConfigMap. The adapter process does not select a ConfigMap by name or read it through the Kubernetes API. Classic operator [PR #2133](https://github.com/openshift/lightspeed-operator/pull/2133) proposes injection of `AGENTIC_SKILLS_IMAGE` into the adapter deployment; until it is available, the deployment must provide the env var directly to exercise default-image resolution. The operator image must be supplied explicitly until an official skills image is pinned as a related image.
 
-The direct deployment in `manifests/` mounts `alerts-adapter-config`. Its volume requires that ConfigMap to exist. After changing it, restart the direct deployment to load the new settings. A process can use defaults when its configuration file is missing, but this does not make a required Kubernetes volume optional.
+The direct deployment in `manifests/` mounts `alerts-adapter-config` and sets an illustrative `AGENTIC_SKILLS_IMAGE`. Its volume requires that ConfigMap to exist. The sample ConfigMap specifies an explicit image, which overrides the environment default; to test the default, omit the entry's `image`. Replace the illustrative image with a verified, pullable digest before production use. After changing the file or environment, restart the direct deployment to load the new settings. A process can use defaults when its configuration file is missing, but this does not make a required Kubernetes volume optional.

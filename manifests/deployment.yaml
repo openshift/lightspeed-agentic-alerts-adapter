@@ -34,6 +34,10 @@ spec:
               mountPath: /etc/alerts-adapter
               readOnly: true
           env:
+            # Direct deployment example; pin a verified skills image digest in production.
+            # ConfigMap skill entries with explicit images override this default.
+            - name: AGENTIC_SKILLS_IMAGE
+              value: quay.io/openshiftanalytics/agentic-skills:latest
             - name: ALERTMANAGER_URL
               value: https://alertmanager-main.openshift-monitoring.svc:9094
             - name: POD_NAMESPACE
