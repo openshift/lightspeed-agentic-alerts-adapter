@@ -276,7 +276,8 @@ func resolveAgent(perStep, global string) string {
 }
 
 // NextAvailableName returns baseName when unused, otherwise returns the first
-// available deterministic retry name using -retry-N suffixes.
+// available deterministic retry name, preserving the episode hash and group qualifier.
+// baseName must be the unsuffixed episode base.
 func NextAvailableName(baseName string, existingNames []string) string {
 	existing := make(map[string]struct{}, len(existingNames))
 	for _, name := range existingNames {
@@ -287,9 +288,23 @@ func NextAvailableName(baseName string, existingNames []string) string {
 		return baseName
 	}
 
+	prefix, hashSuffix := baseName, ""
+	if i := strings.LastIndexByte(baseName, '-'); i >= 0 &&
+		len(baseName)-i-1 == startsAtHashLen {
+		prefix, hashSuffix = baseName[:i], baseName[i:]
+	}
+	qualifier := ""
+	if strings.HasPrefix(prefix, "g-") {
+		group, readable, ok := strings.Cut(prefix[2:], "-")
+		if ok && len(group) == fingerprintLen {
+			qualifier, prefix = "g-"+group+"-", readable
+		}
+	}
+
 	for i := 1; ; i++ {
 		suffix := fmt.Sprintf("-retry-%d", i)
-		candidate := truncateDNS(baseName, maxLabelValueLen-len(suffix)) + suffix
+		available := maxLabelValueLen - len(qualifier) - len(hashSuffix) - len(suffix)
+		candidate := qualifier + truncateDNS(prefix, available) + hashSuffix + suffix
 		if _, ok := existing[candidate]; !ok {
 			return candidate
 		}
