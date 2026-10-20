@@ -13,8 +13,20 @@ import (
 	"testing/iotest"
 	"time"
 
+	agenticv1alpha1 "github.com/openshift/lightspeed-agentic-operator/api/v1alpha1"
 	"github.com/stretchr/testify/assert"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
+
+type investigateFunc func(
+	context.Context, string, AgenticRunCreator,
+) (*agenticv1alpha1.AgenticRun, error)
+
+func (f investigateFunc) Investigate(
+	ctx context.Context, fingerprint string, creator AgenticRunCreator,
+) (*agenticv1alpha1.AgenticRun, error) {
+	return f(ctx, fingerprint, creator)
+}
 
 type authorizeFunc func(context.Context, string) (AgenticRunCreator, error)
 
@@ -51,7 +63,7 @@ func TestInvestigationHandlerInvalidRequest(t *testing.T) {
 			)
 			response := httptest.NewRecorder()
 
-			NewInvestigationHandler().ServeHTTP(response, request)
+			NewInvestigationHandler(nil).ServeHTTP(response, request)
 
 			assert.Equal(t, http.StatusBadRequest, response.Code)
 			assert.Equal(t, "application/json", response.Header().Get("Content-Type"))
@@ -112,7 +124,7 @@ func TestInvestigationHandlerBodyRead(t *testing.T) {
 			)
 			response := httptest.NewRecorder()
 
-			NewInvestigationHandler().ServeHTTP(response, request)
+			NewInvestigationHandler(nil).ServeHTTP(response, request)
 
 			assert.Equal(t, tt.status, response.Code)
 			assert.Equal(t, "application/json", response.Header().Get("Content-Type"))
@@ -244,7 +256,11 @@ func TestAuthMiddleware(t *testing.T) {
 			nextCalls := 0
 			next := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 				nextCalls++
-				NewInvestigationHandler().ServeHTTP(w, r)
+				NewInvestigationHandler(investigateFunc(func(
+					context.Context, string, AgenticRunCreator,
+				) (*agenticv1alpha1.AgenticRun, error) {
+					return nil, errInternal
+				})).ServeHTTP(w, r)
 			})
 			server := NewInvestigationServer("", AuthMiddleware(access, next))
 			server.Handler.ServeHTTP(response, request)
@@ -310,4 +326,129 @@ func TestAuthMiddlewarePreservesRequestContext(t *testing.T) {
 	assert.Equal(t, 1, authCalls)
 	assert.Equal(t, 1, nextCalls)
 	assert.Equal(t, http.StatusNoContent, response.Code)
+}
+
+func TestInvestigationHandlerResponse(t *testing.T) {
+	const internal = `{"error":{"code":"internal_error","message":"An internal error occurred"}}`
+	tests := []struct {
+		name         string
+		err          error
+		nilResult    bool
+		cancelDuring bool
+		invalidBody  bool
+		status       int
+		response     string
+	}{
+		{
+			name: "created", status: http.StatusCreated,
+			response: `{"namespace":"test-namespace","name":"test-run"}`,
+		},
+		{
+			name: "suspended", err: errSuspended, status: http.StatusForbidden,
+			response: `{"error":{"code":"investigations_suspended","message":"Investigations are suspended"}}`,
+		},
+		{
+			name: "alert not found", err: errAlertNotFound, status: http.StatusNotFound,
+			response: `{"error":{"code":"alert_not_found","message":"No eligible alert matches the fingerprint"}}`,
+		},
+		{
+			name: "in progress", err: errRunInProgress, status: http.StatusConflict,
+			response: `{"error":{"code":"investigation_in_progress","message":"An investigation already exists"}}`,
+		},
+		{
+			name: "caller unauthorized", err: errInvestigationUnauthorized,
+			status:   http.StatusUnauthorized,
+			response: `{"error":{"code":"unauthorized","message":"A valid bearer token is required"}}`,
+		},
+		{
+			name: "caller forbidden", err: errInvestigationForbidden,
+			status:   http.StatusForbidden,
+			response: `{"error":{"code":"forbidden","message":"You are not allowed to trigger investigations"}}`,
+		},
+		{
+			name: "dependency failure", err: errors.New("test diagnostic must not escape"),
+			status: http.StatusInternalServerError, response: internal,
+		},
+		{
+			name: "missing result", nilResult: true,
+			status: http.StatusInternalServerError, response: internal,
+		},
+		{
+			name: "cancelled during investigation", cancelDuring: true,
+			status: http.StatusInternalServerError, response: internal,
+		},
+		{
+			name: "authorized invalid body", invalidBody: true,
+			status:   http.StatusBadRequest,
+			response: `{"error":{"code":"invalid_request","message":"Request must contain only a non-empty fingerprint string"}}`,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ctx, cancel := context.WithCancel(t.Context())
+			defer cancel()
+			creator := &fakeRunClient{}
+			authCalls, investigationCalls := 0, 0
+			access := authorizeFunc(func(
+				context.Context, string,
+			) (AgenticRunCreator, error) {
+				authCalls++
+				return creator, nil
+			})
+			investigator := investigateFunc(func(
+				gotCtx context.Context, fingerprint string, gotCreator AgenticRunCreator,
+			) (*agenticv1alpha1.AgenticRun, error) {
+				investigationCalls++
+				assert.Equal(t, "abc", fingerprint)
+				assert.Same(t, creator, gotCreator)
+				assert.Same(t, creator, gotCtx.Value(creatorContextKey{}))
+				deadline, ok := gotCtx.Deadline()
+				if assert.True(t, ok) {
+					assert.Positive(t, time.Until(deadline))
+					assert.LessOrEqual(t, time.Until(deadline), requestTimeout)
+				}
+				if tt.cancelDuring {
+					cancel()
+					assert.ErrorIs(t, gotCtx.Err(), context.Canceled)
+				}
+				if tt.nilResult {
+					return nil, tt.err
+				}
+				return &agenticv1alpha1.AgenticRun{
+					ObjectMeta: metav1.ObjectMeta{
+						Name: "test-run", Namespace: "test-namespace",
+					},
+				}, tt.err
+			})
+			payload := `{"fingerprint":"abc"}`
+			if tt.invalidBody {
+				payload = "{"
+			}
+			request := httptest.NewRequest(
+				http.MethodPost, "/api/v1/investigations", strings.NewReader(payload),
+			).WithContext(ctx)
+			request.Header.Set("Authorization", "Bearer test-only-caller")
+			response := httptest.NewRecorder()
+			server := NewInvestigationServer(
+				"", AuthMiddleware(access, NewInvestigationHandler(investigator)),
+			)
+
+			server.Handler.ServeHTTP(response, request)
+
+			assert.Equal(t, 1, authCalls)
+			wantCalls := 1
+			if tt.invalidBody {
+				wantCalls = 0
+			}
+			assert.Equal(t, wantCalls, investigationCalls)
+			assert.Equal(t, tt.status, response.Code)
+			assert.Equal(t, "application/json", response.Header().Get("Content-Type"))
+			assert.JSONEq(t, tt.response, response.Body.String())
+			wantChallenge := ""
+			if tt.status == http.StatusUnauthorized {
+				wantChallenge = "Bearer"
+			}
+			assert.Equal(t, wantChallenge, response.Header().Get("WWW-Authenticate"))
+		})
+	}
 }

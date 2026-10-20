@@ -2,11 +2,14 @@ package adapter
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"errors"
 	"io"
 	"net"
 	"net/http"
+
+	agenticv1alpha1 "github.com/openshift/lightspeed-agentic-operator/api/v1alpha1"
 )
 
 const invalidRequestMessage = "Request must contain only a non-empty fingerprint string"
@@ -15,8 +18,18 @@ type requestBody struct {
 	Fingerprint string `json:"fingerprint"`
 }
 
-// NewInvestigationHandler validates requests without creating runs yet.
-func NewInvestigationHandler() http.HandlerFunc {
+type responseBody struct {
+	Namespace string `json:"namespace"`
+	Name      string `json:"name"`
+}
+
+// Investigator creates an investigation using the authorized caller's creator.
+type Investigator interface {
+	Investigate(context.Context, string, AgenticRunCreator) (*agenticv1alpha1.AgenticRun, error)
+}
+
+// NewInvestigationHandler validates requests and creates an investigation.
+func NewInvestigationHandler(investigator Investigator) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		body, err := io.ReadAll(http.MaxBytesReader(w, r.Body, 4<<10))
 		if err != nil {
@@ -39,10 +52,46 @@ func NewInvestigationHandler() http.HandlerFunc {
 			return
 		}
 
-		// TODO: Check suspension, fetch the canonical alert, and build/deduplicate the run.
-		// Create it using the caller's creator from the request context and return 201.
-		writeErrorResponse(w, http.StatusInternalServerError,
-			"internal_error", "An internal error occurred")
+		ctx := r.Context()
+		creator, ok := ctx.Value(creatorContextKey{}).(AgenticRunCreator)
+		if !ok || creator == nil || ctx.Err() != nil {
+			writeRunError(w, errInternal)
+			return
+		}
+		run, err := investigator.Investigate(ctx, request.Fingerprint, creator)
+		if ctx.Err() != nil {
+			err = ctx.Err()
+		}
+		if err != nil {
+			writeRunError(w, err)
+			return
+		}
+		if run == nil {
+			writeRunError(w, errInternal)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusCreated)
+		_ = json.NewEncoder(w).Encode(responseBody{
+			Namespace: run.Namespace,
+			Name:      run.Name,
+		})
+	}
+}
+
+func writeRunError(w http.ResponseWriter, err error) {
+	switch {
+	case errors.Is(err, errSuspended):
+		writeErrorResponse(w, http.StatusForbidden,
+			"investigations_suspended", "Investigations are suspended")
+	case errors.Is(err, errAlertNotFound):
+		writeErrorResponse(w, http.StatusNotFound,
+			"alert_not_found", "No eligible alert matches the fingerprint")
+	case errors.Is(err, errRunInProgress):
+		writeErrorResponse(w, http.StatusConflict,
+			"investigation_in_progress", "An investigation already exists")
+	default:
+		writeAuthError(w, err)
 	}
 }
 

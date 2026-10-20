@@ -127,17 +127,29 @@ func main() {
 		}
 	}
 
-	a := adapter.NewWithMaxConcurrentTargets(targetsSource, suspensionClient, cfg, maxConcurrentTargets, logger)
-	if err := startHealthServer(ctx, logger, healthAddr, a.Healthy); err != nil {
+	var localInvestigationTarget adapter.Target
+	for _, target := range targets {
+		if target.Name == "local" && target.ID == "" {
+			localInvestigationTarget = target
+			break
+		}
+	}
+	investigationService := adapter.NewInvestigationService(
+		localInvestigationTarget, suspensionClient, cfg,
+	)
+
+	alertsAdapter := adapter.NewWithMaxConcurrentTargets(targetsSource, suspensionClient, cfg, maxConcurrentTargets, logger)
+	if err := startHealthServer(ctx, logger, healthAddr, alertsAdapter.Healthy); err != nil {
 		logger.Error("fatal error", "error", err)
 		os.Exit(1)
 	}
 
+
 	server := adapter.NewInvestigationServer(
 		net.JoinHostPort(httpHost, strconv.Itoa(port)),
-		adapter.AuthMiddleware(access, adapter.NewInvestigationHandler()),
+		adapter.AuthMiddleware(access, adapter.NewInvestigationHandler(investigationService)),
 	)
-	if err := startServer(ctx, stop, server, a.Run); err != nil {
+	if err := startServer(ctx, stop, server, alertsAdapter.Run); err != nil {
 		logger.Error("fatal error", "error", err)
 		os.Exit(1)
 	}
