@@ -6,10 +6,13 @@ import (
 	"flag"
 	"fmt"
 	"log/slog"
+	"net"
+	"net/http"
 	"os"
 	"os/signal"
 	"strconv"
 	"syscall"
+	"time"
 
 	"github.com/go-logr/logr"
 	agenticv1alpha1 "github.com/openshift/lightspeed-agentic-operator/api/v1alpha1"
@@ -32,6 +35,8 @@ import (
 const (
 	maxConcurrentTargetsEnv                 = "MULTICLUSTER_MAX_CONCURRENT_TARGETS"
 	defaultMulticlusterMaxConcurrentTargets = 4
+
+	healthAddr = ":8081"
 )
 
 func main() {
@@ -86,6 +91,11 @@ func main() {
 			logger.Error("fatal error", "error", err)
 			os.Exit(1)
 		}
+	}
+
+	if err := startHealthServer(ctx, logger); err != nil {
+		logger.Error("fatal error", "error", err)
+		os.Exit(1)
 	}
 
 	a := adapter.NewWithMaxConcurrentTargets(targetsSource, suspensionClient, cfg, maxConcurrentTargets, logger)
@@ -260,4 +270,37 @@ func runControllerManager(ctx context.Context, stop context.CancelFunc, start fu
 		stop()
 	}()
 	return errCh
+}
+
+// startHealthServer starts an HTTP server that serves a /healthz endpoint
+// returning 200 OK. The server shuts down gracefully when ctx is cancelled.
+// It binds to the listener before returning so any port conflict is reported
+// immediately.
+func startHealthServer(ctx context.Context, logger *slog.Logger) error {
+	mux := http.NewServeMux()
+	mux.HandleFunc("/healthz", func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		// response body deliberately left empty
+	})
+
+	ln, err := net.Listen("tcp", healthAddr)
+	if err != nil {
+		return fmt.Errorf("listening on health address %s: %w", healthAddr, err)
+	}
+
+	srv := &http.Server{Handler: mux, ReadHeaderTimeout: 5 * time.Second, IdleTimeout: 30 * time.Second}
+	go func() {
+		logger.Info("health server started", "addr", healthAddr)
+		if err := srv.Serve(ln); err != nil && !errors.Is(err, http.ErrServerClosed) {
+			logger.Error("health server error", "error", err)
+		}
+	}()
+	go func() {
+		<-ctx.Done()
+		if err := srv.Close(); err != nil {
+			logger.Error("closing health server", "error", err)
+		}
+	}()
+
+	return nil
 }
