@@ -11,11 +11,12 @@ LDFLAGS ?=
 GOLANGCI_LINT_VERSION ?= v2.12.2
 GOLANGCI_LINT = $(shell which golangci-lint 2>/dev/null)
 GINKGO = $(shell which ginkgo 2>/dev/null)
+GOVULNCHECK = $(shell which govulncheck 2>/dev/null)
 
 E2E_INTERNAL_REGISTRY = image-registry.openshift-image-registry.svc:5000
 E2E_IMAGE_REF = openshift-lightspeed/$(BINARY_NAME):e2e
 
-.PHONY: all build test clean lint fmt vet run coverage container-build container-push help install-lint deploy-e2e deploy-e2e-local test-e2e undeploy-e2e install-ginkgo
+.PHONY: all build test clean lint fmt vet run coverage container-build container-push help install-lint deploy-e2e deploy-e2e-local test-e2e undeploy-e2e install-ginkgo govulncheck
 
 all: build
 
@@ -41,6 +42,12 @@ fmt:
 
 vet:
 	$(GO) vet ./...
+
+govulncheck:
+ifeq ($(GOVULNCHECK),)
+	$(GO) install golang.org/x/vuln/cmd/govulncheck@latest
+endif
+	govulncheck ./...
 
 run: build
 	$(BIN_DIR)/$(BINARY_NAME)
@@ -81,6 +88,7 @@ help:
 	@echo "  lint            - Run golangci-lint"
 	@echo "  fmt             - Run go fmt"
 	@echo "  vet             - Run go vet"
+	@echo "  govulncheck     - Run govulncheck vulnerability scanner"
 	@echo "  run             - Build and run the binary"
 	@echo "  coverage        - Generate test coverage report"
 	@echo "  container-build - Build container image"
