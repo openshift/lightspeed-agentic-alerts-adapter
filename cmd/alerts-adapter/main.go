@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"crypto/tls"
 	"errors"
 	"flag"
 	"fmt"
@@ -58,10 +59,6 @@ func main() {
 		os.Exit(1)
 	}
 
-	httpHost := os.Getenv("HTTP_HOST")
-	if httpHost == "" {
-		httpHost = "127.0.0.1"
-	}
 	httpPort := os.Getenv("HTTP_PORT")
 	if httpPort == "" {
 		httpPort = "8080"
@@ -69,6 +66,18 @@ func main() {
 	port, err := strconv.Atoi(httpPort)
 	if err != nil || port < 1 || port > 65535 {
 		logger.Error("HTTP_PORT must be an integer between 1 and 65535")
+		os.Exit(1)
+	}
+
+	tlsCertFile := os.Getenv("TLS_CERT_FILE")
+	tlsKeyFile := os.Getenv("TLS_KEY_FILE")
+	if tlsCertFile == "" || tlsKeyFile == "" {
+		logger.Error("TLS_CERT_FILE and TLS_KEY_FILE must be set")
+		os.Exit(1)
+	}
+	certificate, err := tls.LoadX509KeyPair(tlsCertFile, tlsKeyFile)
+	if err != nil {
+		logger.Error("loading TLS certificate", "error", err)
 		os.Exit(1)
 	}
 
@@ -146,9 +155,10 @@ func main() {
 
 
 	server := adapter.NewInvestigationServer(
-		net.JoinHostPort(httpHost, strconv.Itoa(port)),
+		net.JoinHostPort("", strconv.Itoa(port)),
 		adapter.AuthMiddleware(access, adapter.NewInvestigationHandler(investigationService)),
 	)
+	server.TLSConfig.Certificates = []tls.Certificate{certificate}
 	if err := startServer(ctx, stop, server, alertsAdapter.Run); err != nil {
 		logger.Error("fatal error", "error", err)
 		os.Exit(1)
@@ -180,7 +190,7 @@ func startServer(
 	}
 	serverErr := make(chan error, 1)
 	go func() {
-		err := server.Serve(listener)
+		err := server.ServeTLS(listener, "", "")
 		if errors.Is(err, http.ErrServerClosed) {
 			err = nil
 		}
