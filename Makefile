@@ -46,8 +46,9 @@ vet:
 govulncheck:
 ifeq ($(GOVULNCHECK),)
 	$(GO) install golang.org/x/vuln/cmd/govulncheck@latest
+	$(eval GOVULNCHECK=$(shell gobin=$$(go env GOBIN); if [ -n "$$gobin" ]; then echo "$$gobin/govulncheck"; else echo "$$(go env GOPATH)/bin/govulncheck"; fi))
 endif
-	govulncheck ./...
+	$(GOVULNCHECK) ./...
 
 run: build
 	$(BIN_DIR)/$(BINARY_NAME)
