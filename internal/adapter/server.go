@@ -1,6 +1,7 @@
 package adapter
 
 import (
+	"crypto/tls"
 	"net/http"
 	"time"
 )
@@ -11,8 +12,11 @@ func NewInvestigationServer(address string, handler http.Handler) *http.Server {
 	mux.Handle("POST /api/v1/investigations", withTimeout(handler))
 
 	return &http.Server{
-		Addr:              address,
-		Handler:           mux,
+		Addr:    address,
+		Handler: mux,
+		TLSConfig: &tls.Config{
+			MinVersion: tls.VersionTLS12,
+		},
 		ReadHeaderTimeout: 5 * time.Second,
 		ReadTimeout:       10 * time.Second,
 		WriteTimeout:      30 * time.Second,
