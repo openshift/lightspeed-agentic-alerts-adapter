@@ -13,7 +13,7 @@ require (
 	github.com/prometheus/alertmanager v0.34.1
 	go.yaml.in/yaml/v3 v3.0.5
 	k8s.io/api v0.37.0
-	k8s.io/apimachinery v0.37.0
+	k8s.io/apimachinery v0.37.1
 	k8s.io/client-go v0.37.0
 	k8s.io/utils v0.0.0-20260707023825-cf1189d6abe3
 	sigs.k8s.io/controller-runtime v0.25.2
