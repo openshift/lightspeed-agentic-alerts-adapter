@@ -6,7 +6,7 @@ RUN go mod download
 COPY cmd/ cmd/
 COPY internal/ internal/
 # Use the RHEL Go toolchain's FIPS runtime and dynamically link against system libraries.
-RUN CGO_ENABLED=1 GOOS=linux go build -tags strictfipsruntime -ldflags="-s -w" -o ./alerts-adapter ./cmd/alerts-adapter
+RUN CGO_ENABLED=1 GOOS=linux GOEXPERIMENT=strictfipsruntime go build -tags strictfipsruntime -ldflags="-s -w" -o ./alerts-adapter ./cmd/alerts-adapter
 
 FROM registry.access.redhat.com/ubi9-micro:9.8-1791895366@sha256:5be877a2a280ae36eb9ab80ca4efb28bbf77c57abbba38137cdc37a03b8465e6
 
