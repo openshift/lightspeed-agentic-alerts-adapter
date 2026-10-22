@@ -1,6 +1,6 @@
 # Configuration
 
-The adapter reads settings from `/etc/alerts-adapter/config.yaml` once at startup. A deployment can mount a ConfigMap at `/etc/alerts-adapter`. Changes take effect after a process restart.
+The adapter reads application settings from `/etc/alerts-adapter/config.yaml` once at startup. A deployment can mount a ConfigMap at `/etc/alerts-adapter`. HTTPS listener settings come from environment variables. Changes take effect after a process restart.
 
 ## Behavioral Rules
 
@@ -34,6 +34,7 @@ The adapter reads settings from `/etc/alerts-adapter/config.yaml` once at startu
 
 14. The adapter SHALL accept `filtering.allowedReceivers` and `deduplication.ignoredLabels` in their respective sections.
 15. Top-level `allowedReceivers` SHALL remain accepted for compatibility. When both forms are present, `filtering.allowedReceivers` SHALL take precedence, including an explicit empty list. Receiver names SHALL be compared without case sensitivity.
+15a. Receiver allowlists, pre-run delay, and post-run delay SHALL govern polling only. API investigations SHALL use the same configured ignored labels, tools, and agents, but bypass those polling filters and delays.
 
 ### Ignored Labels
 
@@ -54,14 +55,37 @@ The adapter reads settings from `/etc/alerts-adapter/config.yaml` once at startu
 24. Each step SHALL use its non-empty step override, then the non-empty `agent.default`, then the name `default`.
 25. Missing or empty agent fields SHALL use this fallback order. The configuration loader SHALL not check whether the named Agent resources exist.
 
+### HTTPS Listener
+
+26. `HTTP_PORT` SHALL select the HTTPS listener port. An unset or empty value SHALL use `8080`. A value that cannot be parsed as an integer from 1 through 65535 SHALL fail startup. The listener SHALL bind with an empty host on all available interfaces; there is no `HTTP_HOST` setting.
+27. `TLS_CERT_FILE` and `TLS_KEY_FILE` SHALL both be non-empty. The process SHALL load their certificate/key pair before creating Kubernetes clients or starting the poller. Missing settings or a pair that cannot be loaded SHALL fail startup.
+28. HTTPS SHALL require TLS 1.2 or newer, with no plaintext fallback. Certificates SHALL be loaded once at startup; mounted certificate updates SHALL require a process restart.
+
+### Fixed HTTPS Limits
+
+29. The HTTP server SHALL use the fixed header, read, write, idle, and shutdown settings below. These values are not configurable through YAML or environment variables.
+30. After authentication and before JSON decoding, the handler SHALL read the body through a size-limited reader enforcing the fixed body limit below.
+31. Route middleware SHALL derive one request deadline from the incoming context before authentication. All authentication and investigation operations SHALL inherit it, preserving caller cancellation and shorter incoming deadlines. This application deadline is separate from connection I/O timeouts.
+
+| Setting | Value |
+|---|---|
+| `http.Server.MaxHeaderBytes` | 16 KiB |
+| Request body limit | 4 KiB |
+| Application request deadline | 20 seconds |
+| Header read timeout | 5 seconds |
+| Request read timeout | 10 seconds |
+| Response write timeout | 30 seconds |
+| Idle timeout | 60 seconds |
+| Graceful HTTP shutdown deadline after poller exit | 5 seconds |
+
 ## Configuration Surface
 
 | Field | Default | Description |
 |---|---|---|
 | `pollInterval` | `30s` | Interval between poll cycles |
-| `preRunDelay` | `0s` | Minimum alert firing duration |
-| `postRunDelay` | `1h` | Cooldown after a terminal run |
-| `filtering.allowedReceivers` | `[]` | Receiver allowlist; empty skips every alert |
+| `preRunDelay` | `0s` | Polling-only minimum alert firing duration |
+| `postRunDelay` | `1h` | Polling-only cooldown after a terminal run |
+| `filtering.allowedReceivers` | `[]` | Polling receiver allowlist; empty skips every polled alert |
 | `allowedReceivers` | (none) | Older form; the nested field takes precedence |
 | `deduplication.ignoredLabels` | `[pod, instance, endpoint, uid]` | Labels excluded from the group fingerprint |
 | `tools.skills[].image` | `AGENTIC_SKILLS_IMAGE` when omitted | OCI image containing skills; explicit values override the environment |
@@ -72,9 +96,16 @@ The adapter reads settings from `/etc/alerts-adapter/config.yaml` once at startu
 | `agent.execution` | Shared fallback | Execution agent override |
 | `agent.verification` | Shared fallback | Verification agent override |
 | `POD_NAMESPACE` | `openshift-lightspeed` | Namespace for runs and credential Secrets |
+| `HTTP_PORT` | `8080` | HTTPS listener port on all available interfaces |
+| `TLS_CERT_FILE` | Required | Server certificate path |
+| `TLS_KEY_FILE` | Required | Server private-key path |
 
 ## Deployment Integration
 
 The classic Lightspeed operator enables the local adapter through `OLSConfig.spec.ols.deployment.alertsAdapter.configMapRef`. It mounts that user-managed ConfigMap when present and restarts the pod on configuration changes. The hub mounts its own `hub-alerts-adapter-config` ConfigMap. The adapter process does not select a ConfigMap by name or read it through the Kubernetes API. Classic operator [PR #2133](https://github.com/openshift/lightspeed-operator/pull/2133) proposes injection of `AGENTIC_SKILLS_IMAGE` into the adapter deployment; until it is available, the deployment must provide the env var directly to exercise default-image resolution. The operator image must be supplied explicitly until an official skills image is pinned as a related image.
 
 The direct deployment in `manifests/` mounts `alerts-adapter-config` and sets an illustrative `AGENTIC_SKILLS_IMAGE`. Its volume requires that ConfigMap to exist. The sample ConfigMap specifies an explicit image, which overrides the environment default; to test the default, omit the entry's `image`. Replace the illustrative image with a verified, pullable digest before production use. After changing the file or environment, restart the direct deployment to load the new settings. A process can use defaults when its configuration file is missing, but this does not make a required Kubernetes volume optional.
+
+The direct deployment exposes an HTTPS ClusterIP Service on port `8080`. The Service annotation `service.beta.openshift.io/serving-cert-secret-name` requests `lightspeed-agentic-alerts-adapter-tls` from OpenShift Service CA. The Deployment mounts that Secret read-only at `/etc/tls/private`, with `TLS_CERT_FILE=/etc/tls/private/tls.crt` and `TLS_KEY_FILE=/etc/tls/private/tls.key`.
+
+Clients must trust the Service CA and verify the Service DNS name. Certificate renewal requires a pod restart; no automatic restart or hot reload is implemented. Other deployment owners must provide equivalent TLS configuration.

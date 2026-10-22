@@ -8,6 +8,7 @@ Translates AlertManager alerts into AgenticRun custom resources with determinist
 
 1. The adapter SHALL convert an AlertManager alert into an `AgenticRun` CR with deterministic naming, Kubernetes-safe metadata, and a templated request.
 2. Two fingerprint labels SHALL be set on each AgenticRun: `agentic.openshift.io/alert-fingerprint` with the original AlertManager fingerprint (truncated to 8 characters) for UI lookups, and `agentic.openshift.io/alert-group-id` with the stable fingerprint for deduplication.
+2a. Creation paths SHALL add `agentic.openshift.io/trigger=poller` or `api`, while preserving `agentic.openshift.io/source=alertmanager`. The shared builder does not set the trigger label; existing runs SHALL NOT be backfilled.
 3. When the alert has a `namespace` label, the AgenticRun name SHALL be `{alertname}-{namespace}-{startsAt_hash}`.
 4. When the alert has no `namespace` label, the AgenticRun name SHALL be `{alertname}-{startsAt_hash}`.
 4a. In both name formats, `startsAt_hash` SHALL be the first eight lowercase hex characters of SHA-256 over `startsAt` formatted in UTC using RFC 3339. When the reconciliation target identity is non-empty, the hash input SHALL append a null byte (`\0`) followed by that target identity. When the target identity is empty, the hash input SHALL contain only the formatted time.
@@ -23,11 +24,13 @@ Translates AlertManager alerts into AgenticRun custom resources with determinist
 11. When an alert is missing its AlertManager fingerprint, the adapter SHALL return a build error.
 11a. When an alert is missing `startsAt`, the adapter SHALL return a build error.
 
-### EmergencyStopped Replacement
+### Retry Names and Polling Replacement
 
-12. The adapter SHALL support creating a replacement AgenticRun for a still-firing alert when the original alert-derived name already exists for an EmergencyStopped run and the alert is eligible for creation.
-13. A replacement AgenticRun SHALL use the next deterministic retry name, which SHALL remain within the Kubernetes name length limit.
+12. The poller SHALL support creating a replacement AgenticRun for a still-firing alert when the original alert-derived name already exists for an EmergencyStopped run and the alert is eligible for creation. API retry eligibility is defined separately in [investigation API](investigation-api.md#episode-matching-and-naming).
+13. `NextAvailableName` SHALL preserve an unused selected base; otherwise it SHALL choose the first unused `-retry-N` candidate, starting at 1 and preserving the episode hash before the suffix. Retry names SHALL fit within 63 characters by shortening only the readable prefix and trimming trailing separators.
+13a. When the selected base is group-qualified, retry naming SHALL preserve its full group qualifier as well as the eight-character episode hash. The selected input SHALL be an unsuffixed base, so retry suffixes are not nested. Group-qualified base selection is API-only and SHALL NOT change the poller's base selection.
 14. The same set of existing AgenticRuns evaluated for the same alert instance SHALL always produce the same next retry name.
+14a. Candidate availability SHALL be checked against all returned target run names, including names belonging to other groups. Existing resources SHALL NOT be renamed; API compatibility matching for legacy hash-truncated retries is defined in [investigation API](investigation-api.md#episode-matching-and-naming).
 
 ### Metadata Sanitization
 
@@ -63,6 +66,7 @@ Translates AlertManager alerts into AgenticRun custom resources with determinist
 33. `CreateAgenticRun` SHALL create the AgenticRun on the hub cluster. For spoke targets, the AgenticRun SHALL carry the spoke target identity label.
 34. When the Kubernetes API returns 409 AlreadyExists, `CreateAgenticRun` SHALL log at Info level and return `false, nil`.
 35. When the Kubernetes API returns a non-409 error, `CreateAgenticRun` SHALL return `false` and a wrapped error.
+35a. API callers SHALL map `created=false, err=nil` to `409 investigation_in_progress`; polling SHALL retain its existing AlreadyExists no-op behavior. The shared client's create-result contract SHALL remain unchanged.
 
 ## Output Metadata
 
@@ -70,6 +74,7 @@ Translates AlertManager alerts into AgenticRun custom resources with determinist
 |---|---|
 | `metadata.namespace` | Adapter namespace from `POD_NAMESPACE`, default `openshift-lightspeed` |
 | `agentic.openshift.io/source` label | `alertmanager` |
+| `agentic.openshift.io/trigger` label | `api` or `poller`, added by the creation path; absent on older runs |
 | `agentic.openshift.io/alert-fingerprint` label | First eight characters of the original fingerprint, sanitized |
 | `agentic.openshift.io/alert-group-id` label | Stable fingerprint from rule 7 |
 | `agentic.openshift.io/alert-name` label | Lowercase alert name, sanitized |
