@@ -3,6 +3,7 @@ set -euo pipefail
 
 NAMESPACE="${NAMESPACE:-openshift-lightspeed}"
 DEPLOYMENT_NAME="${DEPLOYMENT_NAME:-lightspeed-agentic-alerts-adapter}"
+DEPLOYMENT_TIMEOUT="${DEPLOYMENT_TIMEOUT:-420s}"
 OPERATOR_NAMESPACE="${OPERATOR_NAMESPACE:-openshift-lightspeed}"
 
 if [[ -z "${IMAGE:-}" ]]; then
@@ -79,10 +80,10 @@ oc apply -f "${TMPDIR}/configmap.yaml"
 oc apply -f "${TMPDIR}/deployment.yaml"
 
 # Wait for deployment to be available
-echo "Waiting for deployment to be available (timeout: 5m)..."
+echo "Waiting for deployment to be available (timeout: ${DEPLOYMENT_TIMEOUT})..."
 oc wait deployment "${DEPLOYMENT_NAME}" \
     -n "${NAMESPACE}" \
     --for=condition=available \
-    --timeout=300s
+    --timeout="${DEPLOYMENT_TIMEOUT}"
 
 echo "=== E2E Deploy complete ==="
