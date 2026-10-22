@@ -61,6 +61,7 @@ The test step receives `IMAGE` and calls `make deploy-e2e` and `make test-e2e`. 
 | `IMAGE` | **(required)** | Adapter container image accessible from the cluster |
 | `NAMESPACE` | `openshift-lightspeed` | Namespace for adapter deployment |
 | `DEPLOYMENT_NAME` | `lightspeed-agentic-alerts-adapter` | Adapter deployment name |
+| `DEPLOYMENT_TIMEOUT` | `420s` | Timeout for waiting for the adapter deployment to become available |
 | `OPERATOR_NAMESPACE` | `openshift-lightspeed` | Namespace where the operator is deployed |
 | `OPERATOR_DEPLOYMENT` | `lightspeed-agentic-operator` | Operator deployment name |
 | `OPERATOR_REPO` | `https://github.com/openshift/lightspeed-agentic-operator.git` | Operator git repo (for auto-install) |
