@@ -23,12 +23,28 @@ spec:
       containers:
         - name: adapter
           image: quay.io/openshiftanalytics/lightspeed-agentic-alerts-adapter:latest
+          ports:
+            - name: health
+              containerPort: 8081
+              protocol: TCP
           securityContext:
             allowPrivilegeEscalation: false
             readOnlyRootFilesystem: true
             capabilities:
               drop:
                 - ALL
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: 8081
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          readinessProbe:
+            httpGet:
+              path: /healthz
+              port: 8081
+            initialDelaySeconds: 3
+            periodSeconds: 5
           volumeMounts:
             - name: config
               mountPath: /etc/alerts-adapter
