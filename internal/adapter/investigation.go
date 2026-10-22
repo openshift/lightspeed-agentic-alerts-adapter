@@ -3,6 +3,7 @@ package adapter
 import (
 	"context"
 	"errors"
+	"log/slog"
 	"strconv"
 	"strings"
 
@@ -27,13 +28,14 @@ type InvestigationService struct {
 	target     Target
 	suspension SuspensionSource
 	cfg        config.Config
+	logger     *slog.Logger
 }
 
 func NewInvestigationService(
-	target Target, suspension SuspensionSource, cfg config.Config,
+	target Target, suspension SuspensionSource, cfg config.Config, logger *slog.Logger,
 ) *InvestigationService {
 	return &InvestigationService{
-		target: target, suspension: suspension, cfg: cfg,
+		target: target, suspension: suspension, cfg: cfg, logger: logger,
 	}
 }
 
@@ -44,10 +46,12 @@ func (service *InvestigationService) Investigate(
 	creator AgenticRunCreator,
 ) (*agenticv1alpha1.AgenticRun, error) {
 	if ctx.Err() != nil || creator == nil {
+		logError(ctx, service.logger, "validate_investigation", ctx.Err())
 		return nil, errInternal
 	}
 	suspended, err := service.suspension.Suspended(ctx)
 	if err != nil || ctx.Err() != nil {
+		logError(ctx, service.logger, "read_suspension", err)
 		return nil, errInternal
 	}
 	if suspended {
@@ -57,10 +61,12 @@ func (service *InvestigationService) Investigate(
 	target := service.target
 	if target.Name != "local" || target.ID != "" ||
 		target.Alerts == nil || target.ARClient == nil || ctx.Err() != nil {
+		logError(ctx, service.logger, "select_local_target", errInternal)
 		return nil, errInternal
 	}
 	alerts, err := target.Alerts.GetAlerts(ctx)
 	if err != nil || ctx.Err() != nil {
+		logError(ctx, service.logger, "get_alerts", err)
 		return nil, errInternal
 	}
 	var matched *models.GettableAlert
@@ -80,31 +86,39 @@ func (service *InvestigationService) Investigate(
 		target.Namespace, target.ID, "",
 	)
 	if err != nil || ctx.Err() != nil {
+		logError(ctx, service.logger, "build_run", err)
 		return nil, errInternal
 	}
 	run.Labels[triggerLabel] = "api"
 
 	runs, err := target.ARClient.ListAgenticRuns(ctx)
 	if err != nil || ctx.Err() != nil {
+		logError(ctx, service.logger, "list_runs", err)
 		return nil, errInternal
 	}
 	run.Name, err = nextRunName(run, runs)
 	if err != nil {
+		if !errors.Is(err, errRunInProgress) {
+			logError(ctx, service.logger, "select_run_name", err)
+		}
 		return nil, err
 	}
 	if ctx.Err() != nil {
+		logError(ctx, service.logger, "prepare_run_creation", ctx.Err())
 		return nil, errInternal
 	}
 
 	// Only the request-scoped caller client may create API-triggered runs.
 	created, err := creator.CreateAgenticRun(ctx, run)
 	if ctx.Err() != nil {
+		logError(ctx, service.logger, "create_run", ctx.Err())
 		return nil, errInternal
 	}
 	if apierrors.IsAlreadyExists(err) {
 		return nil, errRunInProgress
 	}
 	if err != nil {
+		logError(ctx, service.logger, "create_run", err)
 		return nil, investigationCallerError(err)
 	}
 	if !created {
