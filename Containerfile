@@ -8,7 +8,7 @@ COPY internal/ internal/
 # Use the RHEL Go toolchain's FIPS runtime and dynamically link against system libraries.
 RUN CGO_ENABLED=1 GOOS=linux GOEXPERIMENT=strictfipsruntime go build -tags strictfipsruntime -ldflags="-s -w" -o ./alerts-adapter ./cmd/alerts-adapter
 
-FROM registry.access.redhat.com/ubi9-micro:9.8-1791895366@sha256:5be877a2a280ae36eb9ab80ca4efb28bbf77c57abbba38137cdc37a03b8465e6
+FROM registry.access.redhat.com/ubi9-minimal:9.8-1791898448@sha256:c4c285d42941ebb2bd4da878479008e1e4536bb599aad1dbe568f89de9053661
 
 LABEL com.redhat.component="lightspeed-agentic-alerts-adapter" \
       name="openshift-lightspeed/lightspeed-agentic-alerts-adapter-rhel9" \
