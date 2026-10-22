@@ -76,7 +76,7 @@ func TestInvestigationService(t *testing.T) {
 			cfg.AllowedReceivers = []string{"different-receiver"}
 			service := NewInvestigationService(Target{
 				Name: "local", Namespace: agenticrun.RunNamespace, Alerts: alerts, ARClient: internalRuns,
-			}, suspension, cfg)
+			}, suspension, cfg, quietLogger())
 			run, err := service.Investigate(t.Context(), fingerprint, caller)
 			assert.ErrorIs(t, err, tt.wantErr)
 			assert.Equal(t, 1, suspension.calls)
@@ -332,7 +332,7 @@ func TestInvestigationCancellation(t *testing.T) {
 			}
 			service := NewInvestigationService(Target{
 				Name: "local", Namespace: agenticrun.RunNamespace, Alerts: dependencies, ARClient: dependencies,
-			}, dependencies, defaultTestConfig())
+			}, dependencies, defaultTestConfig(), quietLogger())
 			var creator AgenticRunCreator = dependencies
 			if tt.missingCreator {
 				creator = nil
@@ -356,7 +356,7 @@ func TestInvestigationRejectsNonLocalTarget(t *testing.T) {
 			caller := &fakeRunClient{}
 			suspension := &fakeSuspensionSource{}
 			target.Alerts, target.ARClient = alerts, internalRuns
-			service := NewInvestigationService(target, suspension, defaultTestConfig())
+			service := NewInvestigationService(target, suspension, defaultTestConfig(), quietLogger())
 			run, err := service.Investigate(t.Context(), "abc", caller)
 			assert.ErrorIs(t, err, errInternal)
 			assert.Nil(t, run)

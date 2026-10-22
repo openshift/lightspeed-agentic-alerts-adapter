@@ -139,7 +139,7 @@ func main() {
 		}
 	}
 	investigationService := adapter.NewInvestigationService(
-		localInvestigationTarget, suspensionClient, cfg,
+		localInvestigationTarget, suspensionClient, cfg, logger,
 	)
 	alertsAdapter := adapter.NewWithMaxConcurrentTargets(targetsSource, suspensionClient, cfg, maxConcurrentTargets, logger)
 	server := adapter.NewInvestigationServer(
