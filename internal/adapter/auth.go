@@ -101,6 +101,7 @@ func (a *AgenticRunInvestigationRequest) Authorize(
 	ctx context.Context, token string,
 ) (AgenticRunCreator, error) {
 	if err := ctx.Err(); err != nil {
+		logError(ctx, a.logger, "authorize", err)
 		return nil, errInternal
 	}
 	if token == "" {
@@ -109,13 +110,19 @@ func (a *AgenticRunInvestigationRequest) Authorize(
 	review, err := a.reviews.Create(ctx, &authenticationv1.TokenReview{
 		Spec: authenticationv1.TokenReviewSpec{Token: token},
 	}, metav1.CreateOptions{})
-	if err != nil || review.Status.Error != "" {
+	if err != nil {
+		logError(ctx, a.logger, "token_review", err)
 		return nil, errInternal
 	}
 	if !review.Status.Authenticated {
 		return nil, errInvestigationUnauthorized
 	}
+	if review.Status.Error != "" {
+		logError(ctx, a.logger, "token_review_response", nil)
+		return nil, errInternal
+	}
 	if err := ctx.Err(); err != nil {
+		logError(ctx, a.logger, "prepare_caller_client", err)
 		return nil, errInternal
 	}
 
@@ -124,6 +131,7 @@ func (a *AgenticRunInvestigationRequest) Authorize(
 	callerConfig.BearerToken = token
 	reviews, err := a.selfSubjectAccessReviews(callerConfig)
 	if err != nil {
+		logError(ctx, a.logger, "create_access_review_client", err)
 		return nil, errInternal
 	}
 	access, err := reviews.Create(ctx,
@@ -138,24 +146,53 @@ func (a *AgenticRunInvestigationRequest) Authorize(
 			},
 		}, metav1.CreateOptions{})
 	if err != nil {
+		logError(ctx, a.logger, "self_subject_access_review", err)
 		return nil, investigationCallerError(err)
 	}
 	if access.Status.EvaluationError != "" {
+		logError(ctx, a.logger, "access_review_response", nil)
 		return nil, errInternal
 	}
 	if !access.Status.Allowed {
 		return nil, errInvestigationForbidden
 	}
 	if err := ctx.Err(); err != nil {
+		logError(ctx, a.logger, "create_caller_client", err)
 		return nil, errInternal
 	}
 	caller, err := client.New(callerConfig, client.Options{
 		Scheme: a.shared.Scheme(), Mapper: a.shared.RESTMapper(),
 	})
 	if err != nil {
+		logError(ctx, a.logger, "create_caller_client", err)
 		return nil, errInternal
 	}
 	return agenticrun.NewClient(caller, a.namespace, a.target, a.logger), nil
+}
+
+func logError(ctx context.Context, logger *slog.Logger, operation string, err error) {
+	if ctx.Err() != nil {
+		err = ctx.Err()
+	}
+	kind := "dependency_error"
+	switch {
+	case errors.Is(err, context.Canceled):
+		kind = "request_cancelled"
+	case errors.Is(err, context.DeadlineExceeded):
+		kind = "deadline_exceeded"
+	case apierrors.IsUnauthorized(err):
+		kind = "unauthorized"
+	case apierrors.IsForbidden(err):
+		kind = "forbidden"
+	case err == nil:
+		kind = "invalid_response"
+	}
+	fields := []any{"operation", operation, "error_kind", kind}
+	var status apierrors.APIStatus
+	if errors.As(err, &status) {
+		fields = append(fields, "upstream_status", status.Status().Code)
+	}
+	logger.ErrorContext(ctx, "API operation failed", fields...)
 }
 
 func investigationCallerError(err error) error {

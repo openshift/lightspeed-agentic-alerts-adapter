@@ -63,7 +63,7 @@ func TestAuthorize(t *testing.T) {
 		{
 			name:            "TokenReview error while unauthenticated",
 			unauthenticated: true, tokenError: "test failure",
-			wantErr: errInternal,
+			wantErr: errInvestigationUnauthorized,
 		},
 		{name: "denied", wantErr: errInvestigationForbidden},
 		{
