@@ -2,6 +2,8 @@
 
 A component that bridges OpenShift cluster alerts into the [Lightspeed Agentic](https://github.com/openshift/lightspeed-agentic-operator) system. It polls the in-cluster AlertManager API for firing alerts and creates `AgenticRun` custom resources (`agentic.openshift.io/v1alpha1`) to trigger automated analysis and remediation workflows.
 
+It also supports on-demand investigations through an authenticated HTTPS API. See [ARCHITECTURE.md](ARCHITECTURE.md) for the design and [.ai/spec/](.ai/spec/README.md) for behavioral contracts and configuration details.
+
 ## Quick start
 
 ### Prerequisites
@@ -26,9 +28,13 @@ make lint         # run golangci-lint
 
 ### Run locally
 
+Provide a kubeconfig with verified API-server TLS and a server certificate/private key pair:
+
 ```sh
-make run
+TLS_CERT_FILE=/path/to/server.crt TLS_KEY_FILE=/path/to/server.key make run
 ```
+
+HTTPS is required; there is no plaintext HTTP fallback.
 
 ### Container
 
@@ -54,6 +60,9 @@ The adapter runs as a single-replica Deployment in the `openshift-lightspeed` na
 | `ALERTMANAGER_URL` | `https://alertmanager-main.openshift-monitoring.svc:9094` | Local AlertManager endpoint; an explicitly empty value disables the local target |
 | `POD_NAMESPACE` | `openshift-lightspeed` | Namespace for runs and spoke credential Secrets |
 | `MULTICLUSTER_MAX_CONCURRENT_TARGETS` | `4` | Positive target concurrency limit when `--multicluster` is enabled |
+| `HTTP_PORT` | `8080` | HTTPS listener port |
+| `TLS_CERT_FILE` | Required | Server certificate path |
+| `TLS_KEY_FILE` | Required | Server private-key path |
 
 ### Suspended mode
 
@@ -81,9 +90,9 @@ The direct deployment in `manifests/` requires the `alerts-adapter-config` Confi
 | Field | Default | Description |
 |---|---|---|
 | `pollInterval` | `30s` | How often to poll AlertManager |
-| `preRunDelay` | `0s` | Minimum time an alert must fire before an AgenticRun is created |
-| `postRunDelay` | `1h` | Minimum time after a terminal AgenticRun before retrying the same alert |
-| `filtering.allowedReceivers` | `[]` | Receiver allowlist — only alerts routed to at least one of these receivers are processed (case-insensitive). Empty by default; no AgenticRuns are created until receivers are explicitly configured |
+| `preRunDelay` | `0s` | Polling only: minimum time an alert must fire before an AgenticRun is created |
+| `postRunDelay` | `1h` | Polling only: minimum time after a terminal AgenticRun before retrying the same alert |
+| `filtering.allowedReceivers` | `[]` | Polling receiver allowlist (case-insensitive). Empty by default; polling creates no runs until receivers are configured. Does not restrict manual investigations |
 | `deduplication.ignoredLabels` | `[pod, instance, endpoint, uid]` | Labels stripped before computing the stable fingerprint for dedup matching. When set, fully replaces the defaults. Set to `[]` to include all labels |
 
 #### Tools / Skills
