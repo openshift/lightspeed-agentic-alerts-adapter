@@ -8,7 +8,7 @@ require (
 	github.com/go-openapi/strfmt v0.27.3
 	github.com/onsi/ginkgo/v2 v2.33.1
 	github.com/onsi/gomega v1.43.0
-	github.com/openshift/lightspeed-agentic-operator/api v0.0.0-20261016153916-14da92cf6efa
+	github.com/openshift/lightspeed-agentic-operator/api v0.0.1-dev.20260520
 	github.com/openshift/lightspeed-hub v0.0.0-20260911154804-5f9c9000d10f
 	github.com/prometheus/alertmanager v0.34.1
 	go.yaml.in/yaml/v3 v3.0.5
