@@ -3,8 +3,13 @@ package framework
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"time"
+
+	"github.com/prometheus/alertmanager/api/v2/models"
+
+	"github.com/openshift/lightspeed-agentic-alerts-adapter/internal/alertmanager"
 )
 
 const (
@@ -100,6 +105,47 @@ func ResolveAlert(ctx context.Context, labels map[string]string) error {
 	}
 
 	return nil
+}
+
+// FindAlert selects an eligible canonical alert containing every test label.
+func FindAlert(
+	ctx context.Context, client *alertmanager.Client, labels map[string]string,
+) (*models.GettableAlert, error) {
+	if len(labels) == 0 {
+		return nil, errors.New("test alert labels must not be empty")
+	}
+	alerts, err := client.GetAlerts(ctx)
+	if ctx.Err() != nil {
+		return nil, ctx.Err()
+	}
+	if err != nil {
+		return nil, errors.New("retrieving test alerts from AlertManager failed")
+	}
+	var matched *models.GettableAlert
+	for _, alert := range alerts {
+		if alert == nil {
+			continue
+		}
+		matches := true
+		for name, value := range labels {
+			actual, present := alert.Labels[name]
+			if !present || actual != value {
+				matches = false
+				break
+			}
+		}
+		if !matches {
+			continue
+		}
+		if alert.Fingerprint == nil || *alert.Fingerprint == "" {
+			return nil, errors.New("matching test alert has no fingerprint")
+		}
+		// Keep the selection stable if Prometheus replicas produce multiple alerts.
+		if matched == nil || *alert.Fingerprint < *matched.Fingerprint {
+			matched = alert
+		}
+	}
+	return matched, nil
 }
 
 func getAlertManagerPods(ctx context.Context) ([]string, error) {

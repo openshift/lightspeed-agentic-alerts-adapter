@@ -34,6 +34,8 @@ type Config struct {
 	Token     string
 	TokenPath string
 	CAPath    string
+	// InsecureSkipVerify disables certificate verification.
+	InsecureSkipVerify bool
 }
 
 func (c *Config) setDefaults() {
@@ -59,7 +61,7 @@ type Client struct {
 
 // New creates a Client configured for the given Alertmanager endpoint. It
 // configures TLS from CABundle or CAPath and returns an error if the selected
-// CA certificate source cannot be read or parsed.
+// CA certificate source cannot be read or parsed, unless InsecureSkipVerify is set.
 func New(cfg Config) (*Client, error) {
 	cfg.setDefaults()
 
@@ -75,7 +77,12 @@ func New(cfg Config) (*Client, error) {
 	}
 
 	defaultTransport := http.DefaultTransport.(*http.Transport).Clone()
-	if len(cfg.CABundle) > 0 {
+	if cfg.InsecureSkipVerify {
+		defaultTransport.TLSClientConfig = &tls.Config{
+			MinVersion:         tls.VersionTLS12,
+			InsecureSkipVerify: true, // Explicit test-only opt-in.
+		}
+	} else if len(cfg.CABundle) > 0 {
 		caPool := x509.NewCertPool()
 		if !caPool.AppendCertsFromPEM(cfg.CABundle) {
 			return nil, fmt.Errorf("alertmanager: no valid certificates found in %s", cfg.CASource)
