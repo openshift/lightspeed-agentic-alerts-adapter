@@ -7,6 +7,7 @@ const (
 	defaultDeploymentName     = "lightspeed-agentic-alerts-adapter"
 	defaultOperatorNamespace  = "openshift-lightspeed"
 	defaultOperatorDeployment = "lightspeed-agentic-operator"
+	defaultAdapterApiAddress  = "127.0.0.1:8080"
 )
 
 type Config struct {
@@ -15,6 +16,7 @@ type Config struct {
 	Image              string
 	OperatorNamespace  string
 	OperatorDeployment string
+	AdapterApiAddress  string
 }
 
 func LoadConfig() Config {
@@ -24,6 +26,7 @@ func LoadConfig() Config {
 		Image:              os.Getenv("IMAGE"),
 		OperatorNamespace:  envOrDefault("OPERATOR_NAMESPACE", defaultOperatorNamespace),
 		OperatorDeployment: envOrDefault("OPERATOR_DEPLOYMENT", defaultOperatorDeployment),
+		AdapterApiAddress:  envOrDefault("ADAPTER_API_ADDRESS", defaultAdapterApiAddress),
 	}
 }
 
