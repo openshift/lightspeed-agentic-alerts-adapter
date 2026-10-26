@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"crypto/tls"
 	"errors"
 	"flag"
 	"fmt"
@@ -22,6 +21,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/rest"
 	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/certwatcher"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
 
@@ -70,9 +70,9 @@ func main() {
 		logger.Error("TLS_CERT_FILE and TLS_KEY_FILE must be set")
 		os.Exit(1)
 	}
-	certificate, err := tls.LoadX509KeyPair(tlsCertFile, tlsKeyFile)
+	certificateWatcher, err := certwatcher.New(tlsCertFile, tlsKeyFile)
 	if err != nil {
-		logger.Error("loading TLS certificate", "error", err)
+		logger.Error("initializing TLS certificate watcher", "error", err)
 		os.Exit(1)
 	}
 
@@ -146,8 +146,20 @@ func main() {
 		net.JoinHostPort("", strconv.Itoa(port)),
 		adapter.AuthMiddleware(access, adapter.NewInvestigationHandler(investigationService)),
 	)
-	server.TLSConfig.Certificates = []tls.Certificate{certificate}
-	if err := startServer(ctx, stop, server, alertsAdapter.Run); err != nil {
+	server.TLSConfig.GetCertificate = certificateWatcher.GetCertificate
+
+	watcherErr := make(chan error, 1)
+	go func() {
+		err := certificateWatcher.Start(ctx)
+		watcherErr <- err
+		if err != nil {
+			stop()
+		}
+	}()
+
+	serverErr := startServer(ctx, stop, server, alertsAdapter.Run)
+	stop()
+	if err := errors.Join(serverErr, <-watcherErr); err != nil {
 		logger.Error("fatal error", "error", err)
 		os.Exit(1)
 	}
