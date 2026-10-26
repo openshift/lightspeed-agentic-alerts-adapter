@@ -213,7 +213,9 @@ var _ = Describe("Investigation API", Label("investigations"), func() {
 		if !assert.NoError(GinkgoT(), err) {
 			return
 		}
-		defer response.Body.Close()
+		defer func() {
+			assert.True(GinkgoT(), response.Body.Close() == nil, "failed to close response body")
+		}()
 		if !assert.Equal(GinkgoT(), http.StatusCreated, response.StatusCode) {
 			return
 		}
@@ -258,7 +260,9 @@ var _ = Describe("Investigation API", Label("investigations"), func() {
 
 func assertInvestigationError(response *http.Response, status int, code, message string) {
 	GinkgoHelper()
-	defer response.Body.Close()
+	defer func() {
+		assert.True(GinkgoT(), response.Body.Close() == nil, "failed to close response body")
+	}()
 	assert.Equal(GinkgoT(), status, response.StatusCode)
 	assert.True(GinkgoT(), response.Header.Get("Content-Type") == "application/json",
 		"unexpected response content type")

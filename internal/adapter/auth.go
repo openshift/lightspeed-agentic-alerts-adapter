@@ -83,16 +83,16 @@ func validateKubernetesEndpoint(cfg *rest.Config) error {
 		return errors.New("invalid Kubernetes endpoint URL")
 	}
 	if server.Scheme != "https" {
-		return errors.New("Kubernetes endpoint must use HTTPS")
+		return errors.New("kubernetes endpoint must use HTTPS")
 	}
 	if server.Host == "" {
-		return errors.New("Kubernetes endpoint must include a host")
+		return errors.New("kubernetes endpoint must include a host")
 	}
 	if server.User != nil {
-		return errors.New("Kubernetes endpoint must not contain user information")
+		return errors.New("kubernetes endpoint must not contain user information")
 	}
 	if cfg.Insecure {
-		return errors.New("Kubernetes TLS certificate verification must be enabled")
+		return errors.New("kubernetes TLS certificate verification must be enabled")
 	}
 	return nil
 }
