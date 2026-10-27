@@ -30,14 +30,9 @@ REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 MANIFESTS_DIR="${REPO_ROOT}/manifests"
 
 TMPDIR=$(mktemp -d)
-PORT_FORWARD_PID=""
 
 cleanup() {
     local status=$?
-    if [[ -n "${PORT_FORWARD_PID}" ]]; then
-        kill "${PORT_FORWARD_PID}" 2>/dev/null || true
-        wait "${PORT_FORWARD_PID}" 2>/dev/null || true
-    fi
     if ! rm -rf "${TMPDIR}"; then
         echo "ERROR: failed to remove the E2E temporary directory" >&2
         if [[ "${status}" -eq 0 ]]; then
@@ -125,59 +120,15 @@ if [[ "${RUN_E2E}" != "1" ]]; then
     exit 0
 fi
 
-ADAPTER_API_ADDRESS="${ADAPTER_API_ADDRESS:-127.0.0.1:18080}"
-if [[ ! "${ADAPTER_API_ADDRESS}" =~ ^127\.0\.0\.1:([0-9]{1,5})$ ]]; then
-    echo "ERROR: ADAPTER_API_ADDRESS must be 127.0.0.1:<port>" >&2
-    exit 1
-fi
-LOCAL_PORT=$((10#${BASH_REMATCH[1]}))
-if (( LOCAL_PORT < 1 || LOCAL_PORT > 65535 )); then
-    echo "ERROR: investigation port must be between 1 and 65535" >&2
-    exit 1
-fi
-export ADAPTER_API_ADDRESS="127.0.0.1:${LOCAL_PORT}"
-
-if [[ -z "${ALERTMANAGER_URL:-}" ]]; then
-    ALERTMANAGER_HOST=$(oc get route alertmanager-main \
-        -n openshift-monitoring -o jsonpath='{.spec.host}')
-    if [[ -z "${ALERTMANAGER_HOST}" ]]; then
-        echo "ERROR: set ALERTMANAGER_URL to a reachable HTTPS endpoint" >&2
-        exit 1
-    fi
-    export ALERTMANAGER_URL="https://${ALERTMANAGER_HOST}"
-fi
-
-echo "Starting the investigation API port-forward..."
-oc -n "${NAMESPACE}" port-forward \
-    service/lightspeed-agentic-alerts-adapter \
-    "${LOCAL_PORT}:8080" --address=127.0.0.1 \
-    >"${TMPDIR}/port-forward.log" 2>/dev/null &
-PORT_FORWARD_PID=$!
-
-ready=0
-for _ in $(seq 1 30); do
-    if ! kill -0 "${PORT_FORWARD_PID}" 2>/dev/null; then
-        echo "ERROR: investigation API port-forward exited before readiness" >&2
-        exit 1
-    fi
-    if grep -Fxq "Forwarding from ${ADAPTER_API_ADDRESS} -> 8080" \
-        "${TMPDIR}/port-forward.log"; then
-        ready=1
-        break
-    fi
-    sleep 1
-done
-if [[ "${ready}" != "1" ]]; then
-    echo "ERROR: timed out waiting for the investigation API port-forward" >&2
-    exit 1
-fi
-
+export ADAPTER_API_ADDRESS="${ADAPTER_API_ADDRESS:-127.0.0.1:18080}"
 export NAMESPACE DEPLOYMENT_NAME OPERATOR_NAMESPACE OPERATOR_DEPLOYMENT
 echo "Running E2E tests..."
 test_status=0
 (
     cd "${REPO_ROOT}"
     go test ./test/e2e -run '^TestE2E$' -count=1 -v -timeout=35m \
-        -args -ginkgo.timeout=30m
+        -args -ginkgo.timeout=30m \
+        "-ginkgo.vv=${E2E_VERBOSE:-false}" \
+        "-ginkgo.trace=${E2E_TRACE:-false}"
 ) || test_status=$?
 exit "${test_status}"

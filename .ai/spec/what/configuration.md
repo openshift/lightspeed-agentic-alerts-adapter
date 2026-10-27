@@ -59,7 +59,7 @@ The adapter reads application settings from `/etc/alerts-adapter/config.yaml` on
 
 26. `HTTP_PORT` SHALL select the HTTPS listener port. An unset or empty value SHALL use `8080`. A value that cannot be parsed as an integer from 1 through 65535 SHALL fail startup. The listener SHALL bind with an empty host on all available interfaces; there is no `HTTP_HOST` setting.
 27. `TLS_CERT_FILE` and `TLS_KEY_FILE` SHALL both be non-empty. The process SHALL load their certificate/key pair before creating Kubernetes clients or starting the poller. Missing settings or a pair that cannot be loaded SHALL fail startup.
-28. HTTPS SHALL require TLS 1.2 or newer, with no plaintext fallback. Certificates SHALL be loaded once at startup; mounted certificate updates SHALL require a process restart.
+28. HTTPS SHALL require TLS 1.2 or newer, with no plaintext fallback. Certificates SHALL be validated at startup and reloaded from mounted files using controller-runtime certwatcher. Reload failures SHALL retain the last valid certificate; successful reloads SHALL apply to new TLS connections without a process restart.
 
 ### Fixed HTTPS Limits
 
@@ -108,4 +108,4 @@ The direct deployment in `manifests/` mounts `alerts-adapter-config` and sets an
 
 The direct deployment exposes an HTTPS ClusterIP Service on port `8080`. The Service annotation `service.beta.openshift.io/serving-cert-secret-name` requests `lightspeed-agentic-alerts-adapter-tls` from OpenShift Service CA. The Deployment mounts that Secret read-only at `/etc/tls/private`, with `TLS_CERT_FILE=/etc/tls/private/tls.crt` and `TLS_KEY_FILE=/etc/tls/private/tls.key`.
 
-Clients must trust the Service CA and verify the Service DNS name. Certificate renewal requires a pod restart; no automatic restart or hot reload is implemented. Other deployment owners must provide equivalent TLS configuration.
+Clients must trust the Service CA and verify the Service DNS name. OpenShift Service CA renews the Secret, kubelet eventually updates the mounted files, and certwatcher reloads them using filesystem events and a default 10-second polling interval. Secret mounts must not use subPath if automatic updates are required. Other deployment owners must provide equivalent TLS configuration.

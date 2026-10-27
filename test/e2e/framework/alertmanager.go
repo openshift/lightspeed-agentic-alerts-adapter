@@ -8,8 +8,6 @@ import (
 	"time"
 
 	"github.com/prometheus/alertmanager/api/v2/models"
-
-	"github.com/openshift/lightspeed-agentic-alerts-adapter/internal/alertmanager"
 )
 
 const (
@@ -107,19 +105,26 @@ func ResolveAlert(ctx context.Context, labels map[string]string) error {
 	return nil
 }
 
-// FindAlert selects an eligible canonical alert containing every test label.
-func FindAlert(
-	ctx context.Context, client *alertmanager.Client, labels map[string]string,
-) (*models.GettableAlert, error) {
+// FindAlertViaExec queries AlertManager directly inside the pod using oc exec,
+// bypassing the OAuth-protected route. Returns the first active alert matching
+// all supplied labels.
+func FindAlertViaExec(ctx context.Context, labels map[string]string) (*models.GettableAlert, error) {
 	if len(labels) == 0 {
 		return nil, errors.New("test alert labels must not be empty")
 	}
-	alerts, err := client.GetAlerts(ctx)
-	if ctx.Err() != nil {
-		return nil, ctx.Err()
-	}
+	pods, err := getAlertManagerPods(ctx)
 	if err != nil {
-		return nil, errors.New("retrieving test alerts from AlertManager failed")
+		return nil, err
+	}
+	url := alertmanagerAPIURL + "?active=true&silenced=false&inhibited=false"
+	out, err := Run(ctx, "exec", pods[0], "-n", alertmanagerNamespace, "-c", "alertmanager", "--",
+		"curl", "-s", url, "--max-time", "10", "--connect-timeout", "5")
+	if err != nil {
+		return nil, fmt.Errorf("querying alerts via exec: %w", err)
+	}
+	var alerts models.GettableAlerts
+	if err := json.Unmarshal([]byte(out), &alerts); err != nil {
+		return nil, fmt.Errorf("decoding alerts response: %w", err)
 	}
 	var matched *models.GettableAlert
 	for _, alert := range alerts {
@@ -140,7 +145,6 @@ func FindAlert(
 		if alert.Fingerprint == nil || *alert.Fingerprint == "" {
 			return nil, errors.New("matching test alert has no fingerprint")
 		}
-		// Keep the selection stable if Prometheus replicas produce multiple alerts.
 		if matched == nil || *alert.Fingerprint < *matched.Fingerprint {
 			matched = alert
 		}
