@@ -31,9 +31,15 @@ type Investigator interface {
 // NewInvestigationHandler validates requests and creates an investigation.
 func NewInvestigationHandler(investigator Investigator) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		body, err := io.ReadAll(http.MaxBytesReader(w, r.Body, 4<<10))
+		const maxBody = 4 << 10
+		body, err := io.ReadAll(io.LimitReader(r.Body, maxBody+1))
 		if err != nil {
 			writeReadError(w, err)
+			return
+		}
+		if len(body) > maxBody {
+			writeErrorResponse(w, http.StatusRequestEntityTooLarge,
+				"request_too_large", "Request body exceeds the size limit")
 			return
 		}
 
@@ -96,12 +102,8 @@ func writeRunError(w http.ResponseWriter, err error) {
 }
 
 func writeReadError(w http.ResponseWriter, err error) {
-	var tooLarge *http.MaxBytesError
 	var timeout net.Error
 	switch {
-	case errors.As(err, &tooLarge):
-		writeErrorResponse(w, http.StatusRequestEntityTooLarge,
-			"request_too_large", "Request body exceeds the size limit")
 	case errors.As(err, &timeout) && timeout.Timeout():
 		writeErrorResponse(w, http.StatusRequestTimeout,
 			"request_timeout", "Timed out while reading the request")

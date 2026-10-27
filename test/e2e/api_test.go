@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"os"
 	"reflect"
 	"strings"
 	"time"
@@ -18,7 +17,6 @@ import (
 	"github.com/stretchr/testify/assert"
 
 	"github.com/openshift/lightspeed-agentic-alerts-adapter/internal/agenticrun"
-	"github.com/openshift/lightspeed-agentic-alerts-adapter/internal/alertmanager"
 	"github.com/openshift/lightspeed-agentic-alerts-adapter/internal/config"
 	"github.com/openshift/lightspeed-agentic-alerts-adapter/test/e2e/framework"
 )
@@ -84,7 +82,7 @@ var _ = Describe("Investigation API", Label("investigations"), func() {
 		}
 	})
 
-	PIt("should enforce the body limit before JSON decoding", func() {
+	It("should enforce the body limit before JSON decoding", func() {
 		ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
 		defer cancel()
 		token, err := framework.CurrentToken(ctx)
@@ -135,13 +133,6 @@ var _ = Describe("Investigation API", Label("investigations"), func() {
 			return
 		}
 
-		alerts, err := alertmanager.New(alertmanager.Config{
-			URL: os.Getenv("ALERTMANAGER_URL"), Token: token,
-			InsecureSkipVerify: true,
-		})
-		if !assert.True(GinkgoT(), err == nil, "cannot initialize the AlertManager client") {
-			return
-		}
 		ruleName := "e2einvestigation" + strings.ToLower(rand.Text())
 		selector := fmt.Sprintf(
 			"agentic.openshift.io/source=alertmanager,agentic.openshift.io/alert-name=%s",
@@ -174,13 +165,17 @@ var _ = Describe("Investigation API", Label("investigations"), func() {
 		var canonical *models.GettableAlert
 		By("Waiting for the canonical AlertManager snapshot and fingerprint")
 		if !assert.Eventually(GinkgoT(), func() bool {
-			found, err := framework.FindAlert(ctx, alerts, labels)
-			if err != nil || found == nil {
+			found, err := framework.FindAlertViaExec(ctx, labels)
+			if err != nil {
+				GinkgoWriter.Printf("FindAlertViaExec error: %v\n", err)
+				return false
+			}
+			if found == nil {
 				return false
 			}
 			canonical = found
 			return true
-		}, 2*time.Minute, 2*time.Second, "test alert did not become eligible in AlertManager") {
+		}, 4*time.Minute, 2*time.Second, "test alert did not become eligible in AlertManager") {
 			return
 		}
 		if !assert.NotEmpty(GinkgoT(), canonical.Receivers) {

@@ -12,17 +12,25 @@ import (
 	"time"
 )
 
-// CurrentToken reads oc's current token without exposing command diagnostics.
+// CurrentToken returns a bearer token for the current session.
+// It tries "oc whoami -t" first (interactive logins and kubeconfigs that
+// carry a token), then falls back to "oc create token" for CI pods that
+// authenticate via client certificate and have no extractable token.
 func CurrentToken(ctx context.Context) (string, error) {
-	output, err := exec.CommandContext(ctx, "oc", "whoami", "-t").Output()
-	if err != nil {
-		return "", errors.New("cannot obtain the current Kubernetes token")
+	if output, err := exec.CommandContext(ctx, "oc", "whoami", "-t").Output(); err == nil {
+		if token := strings.TrimSpace(string(output)); token != "" {
+			return token, nil
+		}
 	}
-	token := strings.TrimSpace(string(output))
-	if token == "" {
-		return "", errors.New("oc returned an empty Kubernetes token")
+	if output, err := exec.CommandContext(ctx,
+		"oc", "create", "token", "lightspeed-agentic-alerts-adapter",
+		"-n", "openshift-lightspeed", "--duration=30m",
+	).Output(); err == nil {
+		if token := strings.TrimSpace(string(output)); token != "" {
+			return token, nil
+		}
 	}
-	return token, nil
+	return "", errors.New("cannot obtain the current Kubernetes token")
 }
 
 type InvestigationClient struct {
