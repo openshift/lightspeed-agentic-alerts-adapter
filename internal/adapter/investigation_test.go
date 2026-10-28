@@ -314,13 +314,14 @@ func TestInvestigationCancellation(t *testing.T) {
 		cancelAt       string
 		missingCreator bool
 		wantCalls      []string
+		wantSuccess    bool
 	}{
 		{name: "already cancelled", cancelBefore: true},
 		{name: "missing creator", missingCreator: true},
 		{name: "after suspension", cancelAt: "suspension", wantCalls: []string{"suspension"}},
 		{name: "after alerts", cancelAt: "alerts", wantCalls: []string{"suspension", "alerts"}},
 		{name: "after listing", cancelAt: "list", wantCalls: []string{"suspension", "alerts", "list"}},
-		{name: "after creation", cancelAt: "create", wantCalls: []string{"suspension", "alerts", "list", "create"}},
+		{name: "after creation", cancelAt: "create", wantCalls: []string{"suspension", "alerts", "list", "create"}, wantSuccess: true},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -341,8 +342,14 @@ func TestInvestigationCancellation(t *testing.T) {
 				cancel()
 			}
 			run, err := service.Investigate(ctx, "abcdef1234567890", creator)
-			assert.ErrorIs(t, err, errInternal)
-			assert.Nil(t, run)
+			if tt.wantSuccess {
+				// cancellation after a persisted create must not fail the request
+				assert.NoError(t, err)
+				assert.NotNil(t, run)
+			} else {
+				assert.ErrorIs(t, err, errInternal)
+				assert.Nil(t, run)
+			}
 			assert.Equal(t, tt.wantCalls, dependencies.calls)
 		})
 	}

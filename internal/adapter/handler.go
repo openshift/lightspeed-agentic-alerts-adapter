@@ -65,7 +65,7 @@ func NewInvestigationHandler(investigator Investigator) http.HandlerFunc {
 			return
 		}
 		run, err := investigator.Investigate(ctx, request.Fingerprint, creator)
-		if ctx.Err() != nil {
+		if err != nil && ctx.Err() != nil {
 			err = ctx.Err()
 		}
 		if err != nil {
