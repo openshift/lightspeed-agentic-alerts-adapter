@@ -375,7 +375,8 @@ func TestInvestigationHandlerResponse(t *testing.T) {
 		},
 		{
 			name: "cancelled during investigation", cancelDuring: true,
-			status: http.StatusInternalServerError, response: internal,
+			status: http.StatusCreated,
+			response: `{"namespace":"test-namespace","name":"test-run"}`,
 		},
 		{
 			name: "authorized invalid body", invalidBody: true,
