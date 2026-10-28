@@ -30,6 +30,12 @@ spec:
             - name: https
               containerPort: 8080
               protocol: TCP
+          livenessProbe:
+            tcpSocket:
+              port: https
+          readinessProbe:
+            tcpSocket:
+              port: https
           securityContext:
             allowPrivilegeEscalation: false
             readOnlyRootFilesystem: true

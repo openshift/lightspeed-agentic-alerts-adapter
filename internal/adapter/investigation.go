@@ -110,15 +110,14 @@ func (service *InvestigationService) Investigate(
 
 	// Only the request-scoped caller client may create API-triggered runs.
 	created, err := creator.CreateAgenticRun(ctx, run)
-	if ctx.Err() != nil {
-		logError(ctx, service.logger, "create_run", ctx.Err())
-		return nil, errInternal
-	}
 	if apierrors.IsAlreadyExists(err) {
 		return nil, errRunInProgress
 	}
 	if err != nil {
 		logError(ctx, service.logger, "create_run", err)
+		if ctx.Err() != nil {
+			return nil, errInternal
+		}
 		return nil, investigationCallerError(err)
 	}
 	if !created {

@@ -184,7 +184,8 @@ func startServer(
 		return fmt.Errorf("starting HTTP listener: %w", err)
 	}
 	server.BaseContext = func(net.Listener) context.Context {
-		return ctx
+		// without cancel: stop() runs before Shutdown and must not cut in-flight requests
+		return context.WithoutCancel(ctx)
 	}
 	serverErr := make(chan error, 1)
 	go func() {
