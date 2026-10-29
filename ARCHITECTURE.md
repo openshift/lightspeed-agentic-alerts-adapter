@@ -27,7 +27,7 @@ The direct deployment exposes an internal HTTPS Service on port `8080`. Its Open
 
 HTTPS is mandatory, with TLS 1.2 as the minimum version. `HTTP_PORT` defaults to `8080` and binds on all available interfaces. `TLS_CERT_FILE` and `TLS_KEY_FILE` are required; missing settings or an unloadable certificate/key pair fail startup before Kubernetes clients or the poller start. There is no plaintext fallback.
 
-Certificates are loaded once at startup. A Secret update does not reload the running server; certificate renewal requires a pod restart. These runtime requirements also apply to operator-managed deployments, which must supply their own TLS configuration; this repository only updates its direct deployment manifests.
+Certificates are validated at startup and reloaded from the mounted files by controller-runtime's `certwatcher`, using filesystem events and a default 10-second polling interval. Successful reloads apply to new TLS connections without a pod restart; failed reloads retain the last valid certificate. Secret mounts must not use `subPath` if automatic updates are required. These runtime requirements also apply to operator-managed deployments, which must supply their own TLS configuration; this repository only updates its direct deployment manifests.
 
 The process does not modify or delete existing runs. If an alert resolves while a run is active, the run continues under the agentic operator. A resolved alert may still have a root cause worth investigating.
 
