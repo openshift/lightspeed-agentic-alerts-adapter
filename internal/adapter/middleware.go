@@ -2,7 +2,6 @@ package adapter
 
 import (
 	"context"
-	"errors"
 	"net/http"
 	"regexp"
 	"time"
@@ -27,24 +26,20 @@ func AuthMiddleware(access AgenticRunRequest, next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ctx := r.Context()
 		if err := ctx.Err(); err != nil {
-			writeAuthError(w, err)
+			writeErrorResponse(w, err)
 			return
 		}
 		token := readToken(r)
 		if token == "" {
-			writeAuthError(w, errInvestigationUnauthorized)
+			writeErrorResponse(w, errInvestigationUnauthorized)
 			return
 		}
 		creator, err := access.Authorize(ctx, token)
 		if ctx.Err() != nil {
 			err = ctx.Err()
 		}
-		if err != nil {
-			writeAuthError(w, err)
-			return
-		}
-		if creator == nil {
-			writeAuthError(w, errInternal)
+		if err != nil || creator == nil {
+			writeErrorResponse(w, err)
 			return
 		}
 		ctx = context.WithValue(ctx, creatorContextKey{}, creator)
@@ -62,18 +57,4 @@ func readToken(r *http.Request) string {
 		return ""
 	}
 	return match[1]
-}
-
-func writeAuthError(w http.ResponseWriter, err error) {
-	switch {
-	case errors.Is(err, errInvestigationUnauthorized):
-		writeErrorResponse(w, http.StatusUnauthorized,
-			"unauthorized", "A valid bearer token is required")
-	case errors.Is(err, errInvestigationForbidden):
-		writeErrorResponse(w, http.StatusForbidden,
-			"forbidden", "You are not allowed to trigger investigations")
-	default:
-		writeErrorResponse(w, http.StatusInternalServerError,
-			"internal_error", "An internal error occurred")
-	}
 }

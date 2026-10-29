@@ -17,12 +17,6 @@ import (
 
 const triggerLabel = "agentic.openshift.io/trigger"
 
-var (
-	errSuspended     = errors.New("suspension is enabled")
-	errAlertNotFound = errors.New("alert not found")
-	errRunInProgress = errors.New("investigation in progress")
-)
-
 // InvestigationService creates on-demand investigations independently of the poller.
 type InvestigationService struct {
 	target     Target
@@ -46,13 +40,11 @@ func (service *InvestigationService) Investigate(
 	creator AgenticRunCreator,
 ) (*agenticv1alpha1.AgenticRun, error) {
 	if ctx.Err() != nil || creator == nil {
-		logError(ctx, service.logger, "validate_investigation", ctx.Err())
-		return nil, errInternal
+		return nil, internalError(ctx, service.logger, "validate_investigation", ctx.Err())
 	}
 	suspended, err := service.suspension.Suspended(ctx)
 	if err != nil || ctx.Err() != nil {
-		logError(ctx, service.logger, "read_suspension", err)
-		return nil, errInternal
+		return nil, internalError(ctx, service.logger, "read_suspension", err)
 	}
 	if suspended {
 		return nil, errSuspended
@@ -61,13 +53,11 @@ func (service *InvestigationService) Investigate(
 	target := service.target
 	if target.Name != "local" || target.ID != "" ||
 		target.Alerts == nil || target.ARClient == nil || ctx.Err() != nil {
-		logError(ctx, service.logger, "select_local_target", errInternal)
-		return nil, errInternal
+		return nil, internalError(ctx, service.logger, "select_local_target", errInternal)
 	}
 	alerts, err := target.Alerts.GetAlerts(ctx)
 	if err != nil || ctx.Err() != nil {
-		logError(ctx, service.logger, "get_alerts", err)
-		return nil, errInternal
+		return nil, internalError(ctx, service.logger, "get_alerts", err)
 	}
 	var matched *models.GettableAlert
 	for _, alert := range alerts {
@@ -86,15 +76,13 @@ func (service *InvestigationService) Investigate(
 		target.Namespace, target.ID, "",
 	)
 	if err != nil || ctx.Err() != nil {
-		logError(ctx, service.logger, "build_run", err)
-		return nil, errInternal
+		return nil, internalError(ctx, service.logger, "build_run", err)
 	}
 	run.Labels[triggerLabel] = "api"
 
 	runs, err := target.ARClient.ListAgenticRuns(ctx)
 	if err != nil || ctx.Err() != nil {
-		logError(ctx, service.logger, "list_runs", err)
-		return nil, errInternal
+		return nil, internalError(ctx, service.logger, "list_runs", err)
 	}
 	run.Name, err = nextRunName(run, runs)
 	if err != nil {
@@ -104,8 +92,7 @@ func (service *InvestigationService) Investigate(
 		return nil, err
 	}
 	if ctx.Err() != nil {
-		logError(ctx, service.logger, "prepare_run_creation", ctx.Err())
-		return nil, errInternal
+		return nil, internalError(ctx, service.logger, "prepare_run_creation", ctx.Err())
 	}
 
 	// Only the request-scoped caller client may create API-triggered runs.
@@ -212,19 +199,5 @@ func matchesAttempt(
 
 // shortenBase preserves the episode hash and optional full group qualifier.
 func shortenBase(base string, limit int) string {
-	if len(base) <= limit {
-		return base
-	}
-	hashStart := len(base) - episodeHashLen - 1
-	prefix, hash := base[:hashStart], base[hashStart:]
-	qualifier := ""
-	if strings.HasPrefix(prefix, "g-") {
-		group, readable, ok := strings.Cut(prefix[2:], "-")
-		if ok && len(group) == groupIDLen {
-			qualifier, prefix = "g-"+group+"-", readable
-		}
-	}
-	available := limit - len(qualifier) - len(hash)
-	prefix = strings.TrimRight(prefix[:available], "-_.")
-	return qualifier + prefix + hash
+	return agenticrun.ShortenName(base, limit)
 }

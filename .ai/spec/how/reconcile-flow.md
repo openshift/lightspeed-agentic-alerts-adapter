@@ -4,7 +4,7 @@
 
 | File | Key symbols | Role |
 |---|---|---|
-| `cmd/alerts-adapter/main.go` | `main`, `newTargets`, `startServer`, `startSpokeClusterController` | Validate TLS, load settings, create clients, discover targets, coordinate HTTPS and polling |
+| `cmd/alerts-adapter/main.go` | `main`, `run`, `newTargets`, `startServer`, `startSpokeClusterController` | Validate TLS, load settings, create clients, discover targets, coordinate HTTPS and polling |
 | `internal/config/config.go` | `LoadFromFile`, `DefaultConfigPath` | Parse the startup file and apply defaults |
 | `internal/adapter/adapter.go` | `Run`, `reconcile`, `reconcileTarget` | Schedule cycles and process each target |
 | `internal/adapter/server.go` | `NewInvestigationServer` | Configure HTTPS routing and connection bounds |
@@ -12,7 +12,7 @@
 | `internal/adapter/auth.go` | `Authorize`, `logError` | Authenticate, authorize, isolate caller clients, and categorize failures |
 | `internal/adapter/handler.go` | `NewInvestigationHandler`, `Investigator` | Parse the bounded body, invoke the service, and encode the response |
 | `internal/adapter/investigation.go` | `InvestigationService`, `Investigate`, `nextRunName` | Retrieve the canonical local alert, check the episode, and create with caller identity |
-| `internal/agenticrun/build.go` | `BuildForTarget`, `StableFingerprint`, `NextAvailableName` | Build run metadata and request |
+| `internal/agenticrun/build.go` | `BuildForTarget`, `StableFingerprint`, `NextAvailableName`, `ShortenName` | Build run metadata and request |
 | `internal/multicluster/registry.go` | `Registry`, `Targets` | Protect the target map and return snapshots |
 | `internal/multicluster/controller.go` | `Reconcile` | Rebuild or remove targets after SpokeCluster events |
 
@@ -39,9 +39,9 @@ flowchart TD
     Next --> Cycle
 ```
 
-`main` validates `HTTP_PORT` and loads the required TLS certificate/key pair before reading configuration or creating Kubernetes clients. It then loads `/etc/alerts-adapter/config.yaml` once. Invalid YAML or duration syntax exits before client setup. The poller and independent investigation service receive the loaded configuration value; there is no configuration source interface or reload path.
+`run` validates `HTTP_PORT` and loads the required TLS certificate/key pair before reading configuration or creating Kubernetes clients. It then loads `/etc/alerts-adapter/config.yaml` once. Invalid YAML or duration syntax exits before client setup. The poller and independent investigation service receive the loaded configuration value; there is no configuration source interface or reload path.
 
-`startServer` opens the listener and serves TLS using the preloaded certificate while the poller runs with the same process context. Serving failures cancel that context. After the poller returns, graceful HTTP shutdown has a five-second deadline; failure falls back to closing the server. Mounted certificate updates require a process restart.
+`startServer` opens the listener and serves TLS using the preloaded certificate while the poller runs with the same process context. Serving failures cancel that context. After the poller returns, graceful HTTP shutdown has a five-second deadline; failure falls back to closing the server. The certificate watcher reloads mounted certificate updates for new connections.
 
 `Run` calls `reconcile` immediately, then creates a ticker. Each reconcile reads the suspension state, performs backoff garbage collection, and takes a registry snapshot. A semaphore bounds target goroutines. Each task gets a context with a deadline of `pollInterval`; a wait group prevents overlapping cycles. Ticker events can be delayed or dropped when work is slow, so this is not a guaranteed delay after each completed cycle.
 
@@ -71,7 +71,7 @@ The handler depends on `Investigator`, implemented by `InvestigationService`, ra
 
 The service retrieves AlertManager once and builds from that canonical snapshot. Internal reads use existing clients; final creation uses the caller's isolated client. Kubernetes rechecks authorization and admission. No failure falls back to ServiceAccount creation.
 
-`nextRunName` matches group and episode across original, qualified, and legacy retry names. It evaluates all attempts at the maximum creation timestamp and passes the selected unsuffixed base plus all returned names to `NextAvailableName`. Kubernetes AlreadyExists resolves snapshot races as API conflicts, without a shared API/poller lock.
+`nextRunName` matches group and episode across original, qualified, and legacy retry names. It evaluates all attempts at the maximum creation timestamp and passes the selected unsuffixed base plus all returned names to `NextAvailableName`. Kubernetes AlreadyExists resolves snapshot races as API conflicts, without a shared API/poller lock. `ShortenName` is shared by retry generation and episode matching so both preserve the same hash and group qualifier.
 
 Detailed selection, authentication precedence, and HTTP errors are defined in [investigation API](../what/investigation-api.md). Numerical listener bounds and TLS deployment settings are defined in [configuration](../what/configuration.md#https-listener).
 

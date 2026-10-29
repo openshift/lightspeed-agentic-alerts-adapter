@@ -48,10 +48,16 @@ func main() {
 	slog.SetDefault(logger)
 	ctrl.SetLogger(logr.FromSlogHandler(logger.Handler()))
 
-	maxConcurrentTargets, err := multiclusterMaxConcurrentTargets(*multicluster)
-	if err != nil {
+	if err := run(*multicluster, logger); err != nil {
 		logger.Error("fatal error", "error", err)
 		os.Exit(1)
+	}
+}
+
+func run(multicluster bool, logger *slog.Logger) error {
+	maxConcurrentTargets, err := multiclusterMaxConcurrentTargets(multicluster)
+	if err != nil {
+		return err
 	}
 
 	httpPort := os.Getenv("HTTP_PORT")
@@ -60,20 +66,17 @@ func main() {
 	}
 	port, err := strconv.Atoi(httpPort)
 	if err != nil || port < 1 || port > 65535 {
-		logger.Error("HTTP_PORT must be an integer between 1 and 65535")
-		os.Exit(1)
+		return errors.New("HTTP_PORT must be an integer between 1 and 65535")
 	}
 
 	tlsCertFile := os.Getenv("TLS_CERT_FILE")
 	tlsKeyFile := os.Getenv("TLS_KEY_FILE")
 	if tlsCertFile == "" || tlsKeyFile == "" {
-		logger.Error("TLS_CERT_FILE and TLS_KEY_FILE must be set")
-		os.Exit(1)
+		return errors.New("TLS_CERT_FILE and TLS_KEY_FILE must be set")
 	}
 	certificateWatcher, err := certwatcher.New(tlsCertFile, tlsKeyFile)
 	if err != nil {
-		logger.Error("initializing TLS certificate watcher", "error", err)
-		os.Exit(1)
+		return fmt.Errorf("initializing TLS certificate watcher: %w", err)
 	}
 
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGTERM, syscall.SIGINT)
@@ -81,19 +84,16 @@ func main() {
 
 	cfg, err := config.LoadFromFile(config.DefaultConfigPath, logger)
 	if err != nil {
-		logger.Error("fatal error", "error", err)
-		os.Exit(1)
+		return err
 	}
 
 	restConfig, err := ctrl.GetConfig()
 	if err != nil {
-		logger.Error("loading kubeconfig", "error", err)
-		os.Exit(1)
+		return fmt.Errorf("loading kubeconfig: %w", err)
 	}
 	k8sClient, err := newClientForConfig(restConfig)
 	if err != nil {
-		logger.Error("fatal error", "error", err)
-		os.Exit(1)
+		return err
 	}
 
 	namespace := os.Getenv("POD_NAMESPACE")
@@ -102,32 +102,29 @@ func main() {
 	}
 
 	localTarget := ""
-	if *multicluster {
+	if multicluster {
 		localTarget = "local"
 	}
 	access, err := adapter.NewAgenticRunInvestigationRequest(
 		restConfig, k8sClient, namespace, localTarget, logger,
 	)
 	if err != nil {
-		logger.Error("initializing authentication client", "error", err)
-		os.Exit(1)
+		return fmt.Errorf("initializing authentication client: %w", err)
 	}
 
 	suspensionClient := agenticolsconfig.NewClient(k8sClient)
 
-	targets, err := newTargets(ctx, k8sClient, namespace, *multicluster, logger)
+	targets, err := newTargets(ctx, k8sClient, namespace, multicluster, logger)
 	if err != nil {
-		logger.Error("fatal error", "error", err)
-		os.Exit(1)
+		return err
 	}
 
 	targetsSource := newTargetRegistry(targets)
 	var managerErr <-chan error
-	if *multicluster {
+	if multicluster {
 		managerErr, err = startSpokeClusterController(ctx, stop, k8sClient, namespace, targetsSource, logger)
 		if err != nil {
-			logger.Error("fatal error", "error", err)
-			os.Exit(1)
+			return err
 		}
 	}
 
@@ -160,17 +157,16 @@ func main() {
 	serverErr := startServer(ctx, stop, server, alertsAdapter.Run)
 	stop()
 	if err := errors.Join(serverErr, <-watcherErr); err != nil {
-		logger.Error("fatal error", "error", err)
-		os.Exit(1)
+		return err
 	}
 	if managerErr != nil {
 		select {
 		case err := <-managerErr:
-			logger.Error("fatal error", "error", err)
-			os.Exit(1)
+			return err
 		default:
 		}
 	}
+	return nil
 }
 
 func startServer(
