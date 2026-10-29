@@ -4,14 +4,14 @@
 
 | File/Directory | Key Symbols | Responsibility |
 |---|---|---|
-| `cmd/alerts-adapter/main.go` | `main`, `newTargets`, `newTargetRegistry`, `startServer`, `startSpokeClusterController` | Validates listener/TLS settings, loads configuration, wires clients and independent polling/investigation components, coordinates HTTPS and poller shutdown |
+| `cmd/alerts-adapter/main.go` | `main`, `run`, `newTargets`, `newTargetRegistry`, `startServer`, `startSpokeClusterController` | Validates listener/TLS settings, loads configuration, wires clients and independent polling/investigation components, coordinates HTTPS and poller shutdown |
 | `internal/adapter/adapter.go` | `Adapter`, `Run`, `reconcile`, `reconcileTarget`, `AlertSource`, `AgenticRunClient`, `SuspensionSource`, `Target`, `TargetSource` | Poll loop and stateless deduplication. Defines consumer interfaces. Implements receiver filtering, pre-run delay, active-run check, post-run delay, creation backoff |
 | `internal/adapter/server.go` | `NewInvestigationServer` | Configures the HTTPS server, POST route, TLS minimum version, connection timeouts, and header limit |
 | `internal/adapter/middleware.go` | `withTimeout`, `AuthMiddleware`, `readToken`, `creatorContextKey` | Derives the request deadline, validates bearer headers, authorizes the caller, and passes the request-scoped creator through the context |
 | `internal/adapter/auth.go` | `AgenticRunRequest`, `AgenticRunCreator`, `AgenticRunInvestigationRequest`, `Authorize`, `logError` | ServiceAccount TokenReview, caller-authenticated SelfSubjectAccessReview, isolated caller clients, and categorized API failure logging |
-| `internal/adapter/handler.go` | `Investigator`, `NewInvestigationHandler`, `requestBody`, `responseBody`, `writeErrorResponse` | Bounded body parsing, fingerprint validation, creator lookup, investigation invocation, and stable HTTP responses |
+| `internal/adapter/handler.go` | `Investigator`, `NewInvestigationHandler`, `requestBody`, `responseBody`, `writeErrorResponse` | Bounded body parsing, fingerprint validation, creator lookup, investigation invocation, and shared typed API errors with stable HTTP responses |
 | `internal/adapter/investigation.go` | `InvestigationService`, `Investigate`, `nextRunName`, `matchesAttempt`, `shortenBase` | Local on-demand investigation flow, suspension, canonical alert selection, episode deduplication, naming, and caller-only creation; independent of polling backoff |
-| `internal/agenticrun/build.go` | `Build`, `BuildForTarget`, `StableFingerprint`, `NextAvailableName`, `requestData`, `requestTemplate` | Alert-to-AgenticRun translation: deterministic naming, metadata sanitization, FNV-64a fingerprinting, Go template rendering |
+| `internal/agenticrun/build.go` | `Build`, `BuildForTarget`, `StableFingerprint`, `NextAvailableName`, `ShortenName`, `requestData`, `requestTemplate` | Alert-to-AgenticRun translation: deterministic naming, metadata sanitization, FNV-64a fingerprinting, Go template rendering |
 | `internal/agenticrun/client.go` | `Client`, `ListAgenticRuns`, `CreateAgenticRun`, `SpokeTargetID` | Kubernetes CRUD for AgenticRun CRs. Target-scoped listing and creation. Spoke target ID computation |
 | `internal/agenticrun/request.tmpl` | (template) | Embedded Go template for the `spec.request` field |
 | `internal/alertmanager/client.go` | `Client`, `GetAlerts`, `Config` | AlertManager v2 API client. Bearer token auth, TLS via service CA or custom CA bundle. Supports local and remote endpoints |
@@ -24,7 +24,7 @@
 
 ## Key Entry Points
 
-- `cmd/alerts-adapter/main.go:main()` validates the port and loads the server certificate/key pair before configuration and Kubernetes client initialization. It builds targets, creates an independent `InvestigationService` for the fixed local target, and optionally starts the SpokeCluster controller.
+- `cmd/alerts-adapter/main.go:run()` validates the port and loads the server certificate/key pair before configuration and Kubernetes client initialization. It builds targets, creates an independent `InvestigationService` for the fixed local target, and optionally starts the SpokeCluster controller.
 - `startServer()` opens the listener, serves HTTPS using the preloaded certificate, runs the poller with the shared process context, and coordinates shutdown.
 - `adapter.Run()` executes an immediate reconcile then enters a ticker loop until context cancellation.
 - The request path is `withTimeout → AuthMiddleware → NewInvestigationHandler → InvestigationService.Investigate`.

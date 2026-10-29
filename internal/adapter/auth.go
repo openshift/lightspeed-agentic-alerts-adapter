@@ -19,12 +19,6 @@ import (
 	"github.com/openshift/lightspeed-agentic-alerts-adapter/internal/agenticrun"
 )
 
-var (
-	errInvestigationUnauthorized = errors.New("unauthorized")
-	errInvestigationForbidden    = errors.New("forbidden")
-	errInternal                  = errors.New("internal error")
-)
-
 // AgenticRunCreator creates runs using an authorized caller's identity.
 type AgenticRunCreator interface {
 	CreateAgenticRun(context.Context, *agenticv1alpha1.AgenticRun) (bool, error)
@@ -59,7 +53,7 @@ func NewAgenticRunInvestigationRequest(
 	return &AgenticRunInvestigationRequest{
 		reviews:                  auth.TokenReviews(),
 		selfSubjectAccessReviews: newSelfSubjectAccessReviews,
-		anonymous:                rest.AnonymousClientConfig(rest.CopyConfig(cfg)),
+		anonymous:                rest.AnonymousClientConfig(cfg),
 		shared:                   shared,
 		namespace:                namespace,
 		target:                   target,
@@ -101,8 +95,7 @@ func (a *AgenticRunInvestigationRequest) Authorize(
 	ctx context.Context, token string,
 ) (AgenticRunCreator, error) {
 	if err := ctx.Err(); err != nil {
-		logError(ctx, a.logger, "authorize", err)
-		return nil, errInternal
+		return nil, internalError(ctx, a.logger, "authorize", err)
 	}
 	if token == "" {
 		return nil, errInvestigationUnauthorized
@@ -111,19 +104,16 @@ func (a *AgenticRunInvestigationRequest) Authorize(
 		Spec: authenticationv1.TokenReviewSpec{Token: token},
 	}, metav1.CreateOptions{})
 	if err != nil {
-		logError(ctx, a.logger, "token_review", err)
-		return nil, errInternal
+		return nil, internalError(ctx, a.logger, "token_review", err)
 	}
 	if !review.Status.Authenticated {
 		return nil, errInvestigationUnauthorized
 	}
 	if review.Status.Error != "" {
-		logError(ctx, a.logger, "token_review_response", nil)
-		return nil, errInternal
+		return nil, internalError(ctx, a.logger, "token_review_response", errors.New("authenticated with review error"))
 	}
 	if err := ctx.Err(); err != nil {
-		logError(ctx, a.logger, "prepare_caller_client", err)
-		return nil, errInternal
+		return nil, internalError(ctx, a.logger, "prepare_caller_client", err)
 	}
 
 	// Never retain request credentials in the shared config or client.
@@ -131,8 +121,7 @@ func (a *AgenticRunInvestigationRequest) Authorize(
 	callerConfig.BearerToken = token
 	reviews, err := a.selfSubjectAccessReviews(callerConfig)
 	if err != nil {
-		logError(ctx, a.logger, "create_access_review_client", err)
-		return nil, errInternal
+		return nil, internalError(ctx, a.logger, "create_access_review_client", err)
 	}
 	access, err := reviews.Create(ctx,
 		&authorizationv1.SelfSubjectAccessReview{
@@ -150,24 +139,27 @@ func (a *AgenticRunInvestigationRequest) Authorize(
 		return nil, investigationCallerError(err)
 	}
 	if access.Status.EvaluationError != "" {
-		logError(ctx, a.logger, "access_review_response", nil)
-		return nil, errInternal
+		return nil, internalError(ctx, a.logger, "access_review_response", errors.New("evaluation error"))
 	}
 	if !access.Status.Allowed {
 		return nil, errInvestigationForbidden
 	}
 	if err := ctx.Err(); err != nil {
-		logError(ctx, a.logger, "create_caller_client", err)
-		return nil, errInternal
+		return nil, internalError(ctx, a.logger, "create_caller_client", err)
 	}
 	caller, err := client.New(callerConfig, client.Options{
 		Scheme: a.shared.Scheme(), Mapper: a.shared.RESTMapper(),
 	})
 	if err != nil {
-		logError(ctx, a.logger, "create_caller_client", err)
-		return nil, errInternal
+		return nil, internalError(ctx, a.logger, "create_caller_client", err)
 	}
 	return agenticrun.NewClient(caller, a.namespace, a.target, a.logger), nil
+}
+
+// internalError logs a sanitized failure and returns the public API error.
+func internalError(ctx context.Context, logger *slog.Logger, operation string, err error) error {
+	logError(ctx, logger, operation, err)
+	return errInternal
 }
 
 func logError(ctx context.Context, logger *slog.Logger, operation string, err error) {
@@ -184,8 +176,6 @@ func logError(ctx context.Context, logger *slog.Logger, operation string, err er
 		kind = "unauthorized"
 	case apierrors.IsForbidden(err):
 		kind = "forbidden"
-	case err == nil:
-		kind = "invalid_response"
 	}
 	fields := []any{"operation", operation, "error_kind", kind}
 	var status apierrors.APIStatus
