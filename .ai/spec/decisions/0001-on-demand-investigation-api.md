@@ -3,7 +3,7 @@
 **Status:** Accepted
 **Date:** 2026-10-09
 
-**Implementation:** Local API, authentication, episode matching, retry naming, and direct-deployment TLS/RBAC are implemented. Cluster-level integration verification remains pending. The current behavioral contract is maintained in [investigation API](../what/investigation-api.md); listener settings and numerical limits are maintained in [configuration](../what/configuration.md#https-listener).
+**Implementation:** Local API, authentication, episode matching, retry naming, and direct-deployment TLS/RBAC are implemented. The current behavioral contract is maintained in [investigation API](../what/investigation-api.md); listener settings and numerical limits are maintained in [configuration](../what/configuration.md#https-listener).
 
 ## Context
 
