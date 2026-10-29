@@ -5,6 +5,12 @@ NAMESPACE="${NAMESPACE:-openshift-lightspeed}"
 DEPLOYMENT_NAME="${DEPLOYMENT_NAME:-lightspeed-agentic-alerts-adapter}"
 DEPLOYMENT_TIMEOUT="${DEPLOYMENT_TIMEOUT:-420s}"
 OPERATOR_NAMESPACE="${OPERATOR_NAMESPACE:-openshift-lightspeed}"
+RUN_E2E="${RUN_E2E:-0}"
+
+if [[ "${RUN_E2E}" != "0" && "${RUN_E2E}" != "1" ]]; then
+    echo "ERROR: RUN_E2E must be 0 or 1" >&2
+    exit 1
+fi
 
 if [[ -z "${IMAGE:-}" ]]; then
     echo "ERROR: IMAGE is required. Set it to a container image accessible from the cluster." >&2
@@ -24,7 +30,21 @@ REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 MANIFESTS_DIR="${REPO_ROOT}/manifests"
 
 TMPDIR=$(mktemp -d)
-trap 'rm -rf "${TMPDIR}"' EXIT
+
+cleanup() {
+    local status=$?
+    if ! rm -rf "${TMPDIR}"; then
+        echo "ERROR: failed to remove the E2E temporary directory" >&2
+        if [[ "${status}" -eq 0 ]]; then
+            status=1
+        fi
+    fi
+    exit "${status}"
+}
+
+trap cleanup EXIT
+trap 'exit 130' INT
+trap 'exit 143' TERM
 
 echo "=== E2E Deploy ==="
 # Log image name without registry to avoid exposing internal hostnames
@@ -40,6 +60,11 @@ for cmd in oc yq; do
         exit 1
     fi
 done
+
+if [[ "${RUN_E2E}" == "1" ]] && ! command -v go &>/dev/null; then
+    echo "ERROR: Go is required when RUN_E2E=1" >&2
+    exit 1
+fi
 
 if ! oc whoami &>/dev/null; then
     echo "ERROR: not logged in to an OpenShift cluster (run 'oc login' first)" >&2
@@ -77,13 +102,33 @@ oc apply -f "${TMPDIR}/namespace.yaml"
 oc apply -f "${TMPDIR}/serviceaccount.yaml"
 oc apply -f "${TMPDIR}/rbac.yaml"
 oc apply -f "${TMPDIR}/configmap.yaml"
+oc apply -f "${TMPDIR}/service.yaml"
 oc apply -f "${TMPDIR}/deployment.yaml"
 
-# Wait for deployment to be available
-echo "Waiting for deployment to be available (timeout: ${DEPLOYMENT_TIMEOUT})..."
-oc wait deployment "${DEPLOYMENT_NAME}" \
+echo "Restarting deployment to pull the updated image..."
+oc rollout restart deployment "${DEPLOYMENT_NAME}" \
+    -n "${NAMESPACE}"
+
+echo "Waiting for deployment rollout to complete (timeout: 5m)..."
+oc rollout status deployment "${DEPLOYMENT_NAME}" \
     -n "${NAMESPACE}" \
-    --for=condition=available \
     --timeout="${DEPLOYMENT_TIMEOUT}"
 
 echo "=== E2E Deploy complete ==="
+
+if [[ "${RUN_E2E}" != "1" ]]; then
+    exit 0
+fi
+
+export ADAPTER_API_ADDRESS="${ADAPTER_API_ADDRESS:-127.0.0.1:18080}"
+export NAMESPACE DEPLOYMENT_NAME OPERATOR_NAMESPACE OPERATOR_DEPLOYMENT
+echo "Running E2E tests..."
+test_status=0
+(
+    cd "${REPO_ROOT}"
+    go test ./test/e2e -run '^TestE2E$' -count=1 -v -timeout=35m \
+        -args -ginkgo.timeout=30m \
+        "-ginkgo.vv=${E2E_VERBOSE:-false}" \
+        "-ginkgo.trace=${E2E_TRACE:-false}"
+) || test_status=$?
+exit "${test_status}"

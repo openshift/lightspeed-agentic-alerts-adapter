@@ -20,9 +20,22 @@ spec:
         - name: config
           configMap:
             name: alerts-adapter-config
+        - name: tls-certs
+          secret:
+            secretName: lightspeed-agentic-alerts-adapter-tls
       containers:
         - name: adapter
           image: quay.io/openshiftanalytics/lightspeed-agentic-alerts-adapter:latest
+          ports:
+            - name: https
+              containerPort: 8080
+              protocol: TCP
+          livenessProbe:
+            tcpSocket:
+              port: https
+          readinessProbe:
+            tcpSocket:
+              port: https
           securityContext:
             allowPrivilegeEscalation: false
             readOnlyRootFilesystem: true
@@ -33,7 +46,16 @@ spec:
             - name: config
               mountPath: /etc/alerts-adapter
               readOnly: true
+            - name: tls-certs
+              mountPath: /etc/tls/private
+              readOnly: true
           env:
+            - name: HTTP_PORT
+              value: "8080"
+            - name: TLS_CERT_FILE
+              value: /etc/tls/private/tls.crt
+            - name: TLS_KEY_FILE
+              value: /etc/tls/private/tls.key
             # Direct deployment example; pin a verified skills image digest in production.
             # ConfigMap skill entries with explicit images override this default.
             - name: AGENTIC_SKILLS_IMAGE
