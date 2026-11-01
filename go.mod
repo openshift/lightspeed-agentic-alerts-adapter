@@ -11,7 +11,7 @@ require (
 	github.com/openshift/lightspeed-agentic-operator/api v0.0.0-20261016153916-14da92cf6efa
 	github.com/openshift/lightspeed-hub v0.0.0-20260911154804-5f9c9000d10f
 	github.com/prometheus/alertmanager v0.34.1
-	go.yaml.in/yaml/v3 v3.0.5
+	go.yaml.in/yaml/v3 v3.0.6
 	k8s.io/api v0.37.0
 	k8s.io/apimachinery v0.37.0
 	k8s.io/client-go v0.37.0
