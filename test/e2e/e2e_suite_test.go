@@ -48,6 +48,11 @@ var _ = BeforeSuite(func() {
 	available, err = framework.IsDeploymentAvailable(ctx, cfg.OperatorNamespace, cfg.OperatorDeployment)
 	Expect(err).NotTo(HaveOccurred(), "failed to check operator deployment")
 	Expect(available).To(BeTrue(), "operator deployment is not available")
+
+	By("Starting port-forward to investigation API")
+	pf, err := framework.StartPortForward(ctx, cfg.Namespace, cfg.AdapterApiAddress)
+	Expect(err).NotTo(HaveOccurred(), "failed to start port-forward")
+	DeferCleanup(pf.Stop)
 })
 
 var _ = ReportAfterSuite("E2E artifact collection and cleanup", func(report Report) {

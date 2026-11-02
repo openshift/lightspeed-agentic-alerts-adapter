@@ -276,24 +276,33 @@ func resolveAgent(perStep, global string) string {
 }
 
 // NextAvailableName returns baseName when unused, otherwise returns the first
-// available deterministic retry name using -retry-N suffixes.
+// available deterministic retry name, preserving the episode hash and group qualifier.
+// baseName must be the unsuffixed episode base.
 func NextAvailableName(baseName string, existingNames []string) string {
-	existing := make(map[string]struct{}, len(existingNames))
+	existing := make(map[string]bool, len(existingNames))
 	for _, name := range existingNames {
-		existing[name] = struct{}{}
+		existing[name] = true
 	}
-
-	if _, ok := existing[baseName]; !ok {
-		return baseName
-	}
-
-	for i := 1; ; i++ {
+	candidate := baseName
+	for i := 1; existing[candidate]; i++ {
 		suffix := fmt.Sprintf("-retry-%d", i)
-		candidate := truncateDNS(baseName, maxLabelValueLen-len(suffix)) + suffix
-		if _, ok := existing[candidate]; !ok {
-			return candidate
-		}
+		candidate = ShortenName(baseName, maxLabelValueLen-len(suffix)) + suffix
 	}
+	return candidate
+}
+
+// ShortenName truncates the readable prefix while preserving the episode hash
+// and any leading group qualifier. limit must leave room for both identifiers.
+func ShortenName(base string, limit int) string {
+	if len(base) <= limit {
+		return base
+	}
+	prefix, hash := base, ""
+	if i := strings.LastIndexByte(base, '-'); i >= 0 && len(base)-i-1 == startsAtHashLen {
+		prefix, hash = base[:i], base[i:]
+	}
+	// Truncation removes only the end of the prefix, retaining any group qualifier.
+	return truncateDNS(prefix, limit-len(hash)) + hash
 }
 
 func truncateDNS(s string, maxLen int) string {
