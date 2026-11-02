@@ -57,7 +57,7 @@ The adapter reads application settings from `/etc/alerts-adapter/config.yaml` on
 
 ### HTTPS Listener
 
-26. `HTTP_PORT` SHALL select the HTTPS listener port. An unset or empty value SHALL use `8080`. A value that cannot be parsed as an integer from 1 through 65535 SHALL fail startup. The listener SHALL bind with an empty host on all available interfaces; there is no `HTTP_HOST` setting.
+26. `HTTPS_PORT` SHALL select the HTTPS listener port. An unset or empty value SHALL use `8443`. A value that cannot be parsed as an integer from 1 through 65535 SHALL fail startup. The listener SHALL bind with an empty host on all available interfaces; there is no `HTTP_HOST` setting.
 27. `TLS_CERT_FILE` and `TLS_KEY_FILE` SHALL both be non-empty. The process SHALL load their certificate/key pair before creating Kubernetes clients or starting the poller. Missing settings or a pair that cannot be loaded SHALL fail startup.
 28. HTTPS SHALL require TLS 1.2 or newer, with no plaintext fallback. Certificates SHALL be validated at startup and reloaded from mounted files using controller-runtime certwatcher. Reload failures SHALL retain the last valid certificate; successful reloads SHALL apply to new TLS connections without a process restart.
 
@@ -96,7 +96,7 @@ The adapter reads application settings from `/etc/alerts-adapter/config.yaml` on
 | `agent.execution` | Shared fallback | Execution agent override |
 | `agent.verification` | Shared fallback | Verification agent override |
 | `POD_NAMESPACE` | `openshift-lightspeed` | Namespace for runs and credential Secrets |
-| `HTTP_PORT` | `8080` | HTTPS listener port on all available interfaces |
+| `HTTPS_PORT` | `8443` | HTTPS listener port on all available interfaces |
 | `TLS_CERT_FILE` | Required | Server certificate path |
 | `TLS_KEY_FILE` | Required | Server private-key path |
 
@@ -106,6 +106,6 @@ The classic Lightspeed operator enables the local adapter through `OLSConfig.spe
 
 The direct deployment in `manifests/` mounts `alerts-adapter-config` and sets an illustrative `AGENTIC_SKILLS_IMAGE`. Its volume requires that ConfigMap to exist. The sample ConfigMap specifies an explicit image, which overrides the environment default; to test the default, omit the entry's `image`. Replace the illustrative image with a verified, pullable digest before production use. After changing the file or environment, restart the direct deployment to load the new settings. A process can use defaults when its configuration file is missing, but this does not make a required Kubernetes volume optional.
 
-The direct deployment exposes an HTTPS ClusterIP Service on port `8080`. The Service annotation `service.beta.openshift.io/serving-cert-secret-name` requests `lightspeed-agentic-alerts-adapter-tls` from OpenShift Service CA. The Deployment mounts that Secret read-only at `/etc/tls/private`, with `TLS_CERT_FILE=/etc/tls/private/tls.crt` and `TLS_KEY_FILE=/etc/tls/private/tls.key`.
+The direct deployment exposes an HTTPS ClusterIP Service on port `8443`. The Service annotation `service.beta.openshift.io/serving-cert-secret-name` requests `lightspeed-agentic-alerts-adapter-tls` from OpenShift Service CA. The Deployment mounts that Secret read-only at `/etc/tls/private`, with `TLS_CERT_FILE=/etc/tls/private/tls.crt` and `TLS_KEY_FILE=/etc/tls/private/tls.key`.
 
 Clients must trust the Service CA and verify the Service DNS name. OpenShift Service CA renews the Secret, kubelet eventually updates the mounted files, and certwatcher reloads them using filesystem events and a default 10-second polling interval. Secret mounts must not use subPath if automatic updates are required. Other deployment owners must provide equivalent TLS configuration.

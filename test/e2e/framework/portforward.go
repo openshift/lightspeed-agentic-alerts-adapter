@@ -25,7 +25,7 @@ func StartPortForward(ctx context.Context, namespace, localAddr string) (*PortFo
 
 	cmd := exec.Command("oc", "-n", namespace, "port-forward",
 		"service/lightspeed-agentic-alerts-adapter",
-		localPort+":8080", "--address=127.0.0.1")
+		localPort+":8443", "--address=127.0.0.1")
 
 	stdout, err := cmd.StdoutPipe()
 	if err != nil {
@@ -38,7 +38,7 @@ func StartPortForward(ctx context.Context, namespace, localAddr string) (*PortFo
 	}
 
 	ready := make(chan error, 1)
-	expected := fmt.Sprintf("Forwarding from %s -> 8080", localAddr)
+	expected := fmt.Sprintf("Forwarding from %s -> 8443", localAddr)
 	go func() {
 		scanner := bufio.NewScanner(stdout)
 		for scanner.Scan() {

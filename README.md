@@ -60,7 +60,7 @@ The adapter runs as a single-replica Deployment in the `openshift-lightspeed` na
 | `ALERTMANAGER_URL` | `https://alertmanager-main.openshift-monitoring.svc:9094` | Local AlertManager endpoint; an explicitly empty value disables the local target |
 | `POD_NAMESPACE` | `openshift-lightspeed` | Namespace for runs and spoke credential Secrets |
 | `MULTICLUSTER_MAX_CONCURRENT_TARGETS` | `4` | Positive target concurrency limit when `--multicluster` is enabled |
-| `HTTP_PORT` | `8080` | HTTPS listener port |
+| `HTTPS_PORT` | `8443` | HTTPS listener port |
 | `TLS_CERT_FILE` | Required | Server certificate path |
 | `TLS_KEY_FILE` | Required | Server private-key path |
 

@@ -7,7 +7,7 @@ const (
 	defaultDeploymentName     = "lightspeed-agentic-alerts-adapter"
 	defaultOperatorNamespace  = "openshift-lightspeed"
 	defaultOperatorDeployment = "lightspeed-agentic-operator"
-	defaultAdapterApiAddress  = "127.0.0.1:8080"
+	defaultAdapterApiAddress  = "127.0.0.1:8443"
 )
 
 type Config struct {

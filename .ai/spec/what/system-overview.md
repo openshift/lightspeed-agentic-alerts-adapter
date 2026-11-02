@@ -46,7 +46,7 @@ File fields and defaults are defined in [configuration](configuration.md#configu
 | `POD_NAMESPACE` | `openshift-lightspeed` | Namespace for runs and spoke credential Secrets |
 | `--multicluster` | `false` | Enable spoke discovery alongside any local target |
 | `MULTICLUSTER_MAX_CONCURRENT_TARGETS` | `4` | Positive target concurrency limit in multicluster mode; ignored in single-cluster mode |
-| `HTTP_PORT` | `8080` | HTTPS listener port on all available interfaces |
+| `HTTPS_PORT` | `8443` | HTTPS listener port on all available interfaces |
 | `TLS_CERT_FILE` | Required | Server certificate path, loaded at startup |
 | `TLS_KEY_FILE` | Required | Server private-key path, loaded at startup |
 
