@@ -39,7 +39,7 @@ flowchart TD
     Next --> Cycle
 ```
 
-`run` validates `HTTP_PORT` and loads the required TLS certificate/key pair before reading configuration or creating Kubernetes clients. It then loads `/etc/alerts-adapter/config.yaml` once. Invalid YAML or duration syntax exits before client setup. The poller and independent investigation service receive the loaded configuration value; there is no configuration source interface or reload path.
+`run` validates `HTTPS_PORT` and loads the required TLS certificate/key pair before reading configuration or creating Kubernetes clients. It then loads `/etc/alerts-adapter/config.yaml` once. Invalid YAML or duration syntax exits before client setup. The poller and independent investigation service receive the loaded configuration value; there is no configuration source interface or reload path.
 
 `startServer` opens the listener and serves TLS using the preloaded certificate while the poller runs with the same process context. Serving failures cancel that context. After the poller returns, graceful HTTP shutdown has a five-second deadline; failure falls back to closing the server. The certificate watcher reloads mounted certificate updates for new connections.
 

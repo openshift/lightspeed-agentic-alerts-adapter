@@ -23,9 +23,9 @@ The classic Lightspeed operator deploys the local adapter when `OLSConfig.spec.o
 
 The adapter can also be deployed directly with [manifests/](manifests/). This deployment mounts `alerts-adapter-config` and requires that ConfigMap to exist. Changes to its data need a manual rollout restart. `POD_NAMESPACE` selects the namespace for runs and spoke credential Secrets; it defaults to `openshift-lightspeed`.
 
-The direct deployment exposes an internal HTTPS Service on port `8080`. Its OpenShift Service CA annotation requests the `lightspeed-agentic-alerts-adapter-tls` Secret, mounted read-only at `/etc/tls/private`. Clients must trust the Service CA and verify the Service DNS name.
+The direct deployment exposes an internal HTTPS Service on port `8443`. Its OpenShift Service CA annotation requests the `lightspeed-agentic-alerts-adapter-tls` Secret, mounted read-only at `/etc/tls/private`. Clients must trust the Service CA and verify the Service DNS name.
 
-HTTPS is mandatory, with TLS 1.2 as the minimum version. `HTTP_PORT` defaults to `8080` and binds on all available interfaces. `TLS_CERT_FILE` and `TLS_KEY_FILE` are required; missing settings or an unloadable certificate/key pair fail startup before Kubernetes clients or the poller start. There is no plaintext fallback.
+HTTPS is mandatory, with TLS 1.2 as the minimum version. `HTTPS_PORT` defaults to `8443` and binds on all available interfaces. `TLS_CERT_FILE` and `TLS_KEY_FILE` are required; missing settings or an unloadable certificate/key pair fail startup before Kubernetes clients or the poller start. There is no plaintext fallback.
 
 Certificates are validated at startup and reloaded from the mounted files by controller-runtime's `certwatcher`, using filesystem events and a default 10-second polling interval. Successful reloads apply to new TLS connections without a pod restart; failed reloads retain the last valid certificate. Secret mounts must not use `subPath` if automatic updates are required. These runtime requirements also apply to operator-managed deployments, which must supply their own TLS configuration; this repository only updates its direct deployment manifests.
 

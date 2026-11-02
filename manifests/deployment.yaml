@@ -28,7 +28,7 @@ spec:
           image: quay.io/openshiftanalytics/lightspeed-agentic-alerts-adapter:latest
           ports:
             - name: https
-              containerPort: 8080
+              containerPort: 8443
               protocol: TCP
           livenessProbe:
             tcpSocket:
@@ -50,8 +50,8 @@ spec:
               mountPath: /etc/tls/private
               readOnly: true
           env:
-            - name: HTTP_PORT
-              value: "8080"
+            - name: HTTPS_PORT
+              value: "8443"
             - name: TLS_CERT_FILE
               value: /etc/tls/private/tls.crt
             - name: TLS_KEY_FILE
