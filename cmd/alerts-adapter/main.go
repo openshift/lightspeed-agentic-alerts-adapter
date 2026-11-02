@@ -60,13 +60,13 @@ func run(multicluster bool, logger *slog.Logger) error {
 		return err
 	}
 
-	httpPort := os.Getenv("HTTP_PORT")
+	httpPort := os.Getenv("HTTPS_PORT")
 	if httpPort == "" {
-		httpPort = "8080"
+		httpPort = "8443"
 	}
 	port, err := strconv.Atoi(httpPort)
 	if err != nil || port < 1 || port > 65535 {
-		return errors.New("HTTP_PORT must be an integer between 1 and 65535")
+		return errors.New("HTTPS_PORT must be an integer between 1 and 65535")
 	}
 
 	tlsCertFile := os.Getenv("TLS_CERT_FILE")
