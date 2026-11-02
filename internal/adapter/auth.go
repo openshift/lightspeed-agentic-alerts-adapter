@@ -127,7 +127,7 @@ func (a *AgenticRunInvestigationRequest) Authorize(
 		&authorizationv1.SelfSubjectAccessReview{
 			Spec: authorizationv1.SelfSubjectAccessReviewSpec{
 				ResourceAttributes: &authorizationv1.ResourceAttributes{
-					Group:     "agentic.openshift.io",
+					Group:     agenticv1alpha1.GroupVersion.Group,
 					Resource:  "agenticruns",
 					Verb:      "create",
 					Namespace: a.namespace,
