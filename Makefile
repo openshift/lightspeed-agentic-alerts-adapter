@@ -16,7 +16,7 @@ GOVULNCHECK = $(shell which govulncheck 2>/dev/null)
 E2E_INTERNAL_REGISTRY = image-registry.openshift-image-registry.svc:5000
 E2E_IMAGE_REF = openshift-lightspeed/$(BINARY_NAME):e2e
 
-.PHONY: all build test clean lint fmt vet run coverage container-build container-push help install-lint deploy-e2e deploy-e2e-local test-e2e undeploy-e2e install-ginkgo govulncheck
+.PHONY: all build test test-coverage clean lint fmt vet run coverage container-build container-push help install-lint deploy-e2e deploy-e2e-local test-e2e undeploy-e2e install-ginkgo govulncheck
 
 all: build
 
@@ -24,7 +24,13 @@ build:
 	$(GO) build $(GOFLAGS) -ldflags "$(LDFLAGS)" -o $(BIN_DIR)/$(BINARY_NAME) $(CMD_DIR)
 
 test:
-	$(GO) test $(GOFLAGS) $$($(GO) list ./... | grep -v /test/e2e)
+	$(GO) test $(GOFLAGS) -coverprofile=coverage.out -covermode=atomic $$($(GO) list ./... | grep -v /test/e2e)
+	bash scripts/codecov.sh coverage.out unit
+
+test-coverage:
+## Run unit tests and emit a Codecov-compatible coverage profile
+## (coverage.out) without uploading. Cluster-dependent E2E tests are excluded.
+	$(GO) test $(GOFLAGS) -coverprofile=coverage.out -covermode=atomic $$($(GO) list ./... | grep -v /test/e2e)
 
 clean:
 	rm -rf $(BIN_DIR)/$(BINARY_NAME) coverage.out coverage.html
