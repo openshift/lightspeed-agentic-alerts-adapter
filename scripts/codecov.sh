@@ -113,10 +113,22 @@ else
     # from astral.sh, matching the approved lightspeed-service pattern.
     # Bound the install so a stalled download cannot block 'make test'.
     log "codecovcli and uv not found on PATH, installing uv first"
+    # prow test containers run with an unusable HOME ('/' or empty), which
+    # the uv installer would turn into a read-only '//.local' path. Install
+    # to an explicit writable directory instead, bypassing HOME entirely.
+    uv_root="${TMPDIR:-/tmp}/ols-codecov-uv"
+    uv_bin="$uv_root/bin"
+    mkdir -p "$uv_bin"
+    # Point every HOME-derived uv path at a writable directory: prow test
+    # containers run with an unusable HOME ('/' or empty).
+    export UV_UNMANAGED_INSTALL="$uv_bin"
+    export UV_CACHE_DIR="$uv_root/cache"
+    export UV_TOOL_DIR="$uv_root/tools"
+    export UV_PYTHON_INSTALL_DIR="$uv_root/python"
     if ! timeout "${UV_INSTALL_TIMEOUT_SECONDS:-120}" curl -LsSf https://astral.sh/uv/install.sh | sh; then
         report_not_uploaded "uv installer failed or timed out"
     fi
-    export PATH="${HOME:-/tmp}/.local/bin:$PATH"
+    export PATH="$uv_bin:$PATH"
     if ! command -v uv > /dev/null 2>&1; then
         report_not_uploaded "uv still not available after install attempt"
     fi
