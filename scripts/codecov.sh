@@ -92,6 +92,7 @@ cli_args=(
     --sha "$sha"
     --branch "$branch"
     --fail-on-error
+    --disable-search
 )
 if [ -n "$flag" ]; then
     cli_args+=(--flag "$flag")
@@ -108,10 +109,17 @@ elif command -v uv > /dev/null 2>&1; then
 else
     # Neither the codecov CLI nor uv is installed (e.g. a bare CI build
     # root): install uv to the user prefix, like lightspeed-service's
-    # install-uv Makefile target.
+    # install-uv Makefile target. The installer is fetched over HTTPS
+    # from astral.sh, matching the approved lightspeed-service pattern.
+    # Bound the install so a stalled download cannot block 'make test'.
     log "codecovcli and uv not found on PATH, installing uv first"
-    curl -LsSf https://astral.sh/uv/install.sh | sh
-    export PATH="$HOME/.local/bin:$PATH"
+    if ! timeout "${UV_INSTALL_TIMEOUT_SECONDS:-120}" curl -LsSf https://astral.sh/uv/install.sh | sh; then
+        report_not_uploaded "uv installer failed or timed out"
+    fi
+    export PATH="${HOME:-/tmp}/.local/bin:$PATH"
+    if ! command -v uv > /dev/null 2>&1; then
+        report_not_uploaded "uv still not available after install attempt"
+    fi
     cli=(uv tool run --from "codecov-cli==${CODECOV_CLI_VERSION}" codecovcli)
 fi
 
