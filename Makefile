@@ -90,7 +90,8 @@ container-push: container-build
 help:
 	@echo "Targets:"
 	@echo "  build           - Build the binary"
-	@echo "  test            - Run tests"
+	@echo "  test            - Run unit tests with coverage and upload to Codecov (CI only; skipped locally)"
+	@echo "  test-coverage   - Run unit tests and generate coverage.out without uploading"
 	@echo "  clean           - Remove build artifacts"
 	@echo "  lint            - Run golangci-lint"
 	@echo "  fmt             - Run go fmt"
