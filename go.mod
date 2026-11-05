@@ -6,7 +6,7 @@ require (
 	github.com/go-logr/logr v1.4.4
 	github.com/go-openapi/runtime v0.33.4
 	github.com/go-openapi/strfmt v0.27.4
-	github.com/onsi/ginkgo/v2 v2.33.1
+	github.com/onsi/ginkgo/v2 v2.34.0
 	github.com/onsi/gomega v1.44.0
 	github.com/openshift/lightspeed-agentic-operator/api v0.0.0-20261104104257-170ab9f46c42
 	github.com/openshift/lightspeed-hub v0.0.0-20260911154804-5f9c9000d10f
