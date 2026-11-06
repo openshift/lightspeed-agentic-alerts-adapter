@@ -75,6 +75,10 @@ The core reconcile loop that continuously polls AlertManager, applies receiver f
 
 32. The adapter SHALL exit cleanly on SIGTERM or SIGINT, completing or cancelling any in-flight poll cycle before stopping, and exit with status code 0.
 
+### Fleet Drain Is Not Suspension [PLANNED: OLS-4785]
+
+33. The planned fleet/per-spoke drain gate SHALL suppress only affected spoke targets and new work, including in-flight creation races, without cancelling previously admitted workflows or changing the local target's existing behavior. It SHALL NOT set global AgenticOLSConfig suspension to achieve graceful drain. Current suspension and missing-config behavior in rules 4–6 are unchanged; they do not establish fleet activation or authorize spoke execution. See [multicluster drain rules 18–23](multicluster.md) for scope, restart/freshness, credential ordering and verification requirements.
+
 ## Constraints
 
 Receiver filtering is the only configured alert-selection filter. There is no separate severity gate: an `info` or `none` alert can pass when its receiver is allowed. Each target processes alerts in sequence; targets may run concurrently. A poll cycle waits for all started target tasks.
