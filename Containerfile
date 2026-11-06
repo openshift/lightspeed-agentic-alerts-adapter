@@ -7,9 +7,18 @@ RUN go mod download
 
 COPY cmd/ cmd/
 COPY internal/ internal/
-RUN CGO_ENABLED=1 GOOS=${TARGETOS:-linux} GOARCH=${TARGETARCH} GOEXPERIMENT=strictfipsruntime go build -tags strictfipsruntime -ldflags="-s -w" -o ./alerts-adapter ./cmd/alerts-adapter
+# Build with Go's native FIPS 140-3 crypto provider (already pure Go, no
+# CGo/OpenSSL). GOFIPS140=certified selects the certified FIPS module; the
+# binary defaults to fips140=on (see the //go:debug directive in
+# cmd/alerts-adapter/fips.go), keeping FIPS-approved crypto always active
+# (matching the previous strictfipsruntime behavior).
+# GOAMD64 is only consulted when GOARCH=amd64; it is silently ignored for
+# other target architectures (arm64 etc.), so multi-arch builds are unaffected.
+RUN CGO_ENABLED=0 GOFIPS140=certified GOAMD64=v2 GOOS=${TARGETOS:-linux} GOARCH=${TARGETARCH} go build -ldflags="-s -w" -o ./alerts-adapter ./cmd/alerts-adapter
+# Verify alerts-adapter targets at most x86-64-v2 (no-op on non-amd64)
+RUN go build -o check-isa-level ./cmd/check-isa-level && ./check-isa-level ./alerts-adapter
 
-FROM registry.access.redhat.com/ubi9/ubi-minimal:9.8-1793578971@sha256:dfa0eb04abc59221544e74862432496add1f491f915c9b531880f91affc0e12c
+FROM registry.access.redhat.com/ubi9-micro:9.8-1791895366@sha256:5be877a2a280ae36eb9ab80ca4efb28bbf77c57abbba38137cdc37a03b8465e6
 
 LABEL name="openshift-lightspeed/lightspeed-agentic-alerts-adapter-rhel9" \
       cpe="cpe:/a:redhat:openshift_lightspeed:2::el9" \      
