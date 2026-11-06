@@ -8,6 +8,7 @@ import (
 	"slices"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	agenticv1alpha1 "github.com/openshift/lightspeed-agentic-operator/api/v1alpha1"
@@ -76,6 +77,7 @@ type Adapter struct {
 	logger               *slog.Logger
 	creationBackoff      *flowcontrol.Backoff
 	now                  func() time.Time
+	lastCycle            atomic.Int64 // unix nanos of the last poll progress (target or cycle finished)
 }
 
 // New creates an Adapter with the given reconciliation targets, config, and logger.
@@ -86,7 +88,7 @@ func New(targets TargetSource, suspension SuspensionSource, cfg config.Config, l
 // NewWithMaxConcurrentTargets creates an Adapter that reconciles no more than
 // maxConcurrentTargets targets simultaneously.
 func NewWithMaxConcurrentTargets(targets TargetSource, suspension SuspensionSource, cfg config.Config, maxConcurrentTargets int, logger *slog.Logger) *Adapter {
-	return &Adapter{
+	a := &Adapter{
 		targets:              targets,
 		suspension:           suspension,
 		cfg:                  cfg,
@@ -95,6 +97,17 @@ func NewWithMaxConcurrentTargets(targets TargetSource, suspension SuspensionSour
 		creationBackoff:      flowcontrol.NewBackOff(creationBackoffInitial, creationBackoffMax),
 		now:                  time.Now,
 	}
+	a.lastCycle.Store(time.Now().UnixNano())
+	return a
+}
+
+func (a *Adapter) beat() { a.lastCycle.Store(time.Now().UnixNano()) }
+
+// Healthy reports whether the poll loop made progress (a target or a cycle
+// finished) within the last 3 poll intervals. Targets are capped at one poll
+// interval, so long multi-target cycles stay healthy while a stuck loop does not.
+func (a *Adapter) Healthy() bool {
+	return time.Since(time.Unix(0, a.lastCycle.Load())) < 3*a.cfg.PollInterval
 }
 
 // Run starts the poll loop, blocking until the context is cancelled.
@@ -123,6 +136,7 @@ func (a *Adapter) Run(ctx context.Context) error {
 }
 
 func (a *Adapter) reconcile(ctx context.Context) {
+	defer a.beat()
 	a.logger.Debug("poll cycle start")
 
 	suspended, err := a.suspension.Suspended(ctx)
@@ -158,6 +172,7 @@ func (a *Adapter) reconcile(ctx context.Context) {
 		go func(target Target) {
 			defer wg.Done()
 			defer func() { <-semaphore }()
+			defer a.beat()
 			targetCtx, cancel := context.WithTimeout(ctx, a.cfg.PollInterval)
 			defer cancel()
 			a.reconcileTarget(targetCtx, target)
