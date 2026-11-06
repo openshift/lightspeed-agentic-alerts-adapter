@@ -40,11 +40,17 @@ spec:
             capabilities:
               drop:
                 - ALL
+          # Health server starts only after target discovery; allow up to 5 minutes.
+          startupProbe:
+            httpGet:
+              path: /healthz
+              port: 8081
+            periodSeconds: 10
+            failureThreshold: 30
           livenessProbe:
             httpGet:
               path: /healthz
               port: 8081
-            initialDelaySeconds: 5
             periodSeconds: 10
           readinessProbe:
             httpGet:

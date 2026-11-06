@@ -1133,3 +1133,67 @@ func TestReconcileCreationBackoffDoesNotRecordNonCreationFailures(t *testing.T) 
 		})
 	}
 }
+
+// TestHealthy checks that a stale heartbeat makes Healthy return false.
+func TestHealthy(t *testing.T) {
+	a := New(StaticTargetSource{}, nil, config.Config{PollInterval: time.Second}, slog.Default())
+	if !a.Healthy() {
+		t.Fatal("want healthy right after a cycle")
+	}
+	a.lastCycle.Store(time.Now().Add(-4 * time.Second).UnixNano())
+	if a.Healthy() {
+		t.Fatal("want unhealthy after 3 missed poll intervals")
+	}
+}
+
+// TestHealthyHeartbeat checks that poll progress refreshes the heartbeat.
+func TestHealthyHeartbeat(t *testing.T) {
+	cfg := config.Config{PollInterval: time.Minute}
+	stale := time.Now().Add(-time.Hour).UnixNano()
+
+	t.Run("suspended cycle updates heartbeat", func(t *testing.T) {
+		a := New(StaticTargetSource{}, &fakeSuspensionSource{suspended: true}, cfg, quietLogger())
+		a.lastCycle.Store(stale)
+
+		a.reconcile(t.Context())
+
+		if !a.Healthy() {
+			t.Error("want healthy after a suspended cycle")
+		}
+	})
+
+	t.Run("suspension read error updates heartbeat", func(t *testing.T) {
+		a := New(StaticTargetSource{}, &fakeSuspensionSource{err: errors.New("boom")}, cfg, quietLogger())
+		a.lastCycle.Store(stale)
+
+		a.reconcile(t.Context())
+
+		if !a.Healthy() {
+			t.Error("want healthy after a failed suspension read")
+		}
+	})
+
+	t.Run("finished target updates heartbeat during a long cycle", func(t *testing.T) {
+		started := make(chan struct{}, 1)
+		release := make(chan struct{})
+		targets := StaticTargetSource{
+			{Name: "fast", Alerts: &fakeAlertSource{}, ARClient: &fakeRunClient{}},
+			{Name: "slow", Alerts: &blockingAlertSource{started: started, release: release}, ARClient: &fakeRunClient{}},
+		}
+		a := New(targets, &fakeSuspensionSource{}, cfg, quietLogger()) // one target at a time
+		a.lastCycle.Store(stale)
+
+		done := make(chan struct{})
+		go func() {
+			defer close(done)
+			a.reconcile(t.Context())
+		}()
+
+		<-started // "fast" has finished; "slow" still blocks the cycle
+		if !a.Healthy() {
+			t.Error("want healthy while a later target is still running")
+		}
+		close(release)
+		<-done
+	})
+}
