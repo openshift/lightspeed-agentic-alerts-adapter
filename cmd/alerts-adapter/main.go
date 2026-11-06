@@ -93,12 +93,12 @@ func main() {
 		}
 	}
 
-	if err := startHealthServer(ctx, logger); err != nil {
+	a := adapter.NewWithMaxConcurrentTargets(targetsSource, suspensionClient, cfg, maxConcurrentTargets, logger)
+	if err := startHealthServer(ctx, logger, healthAddr, a.Healthy); err != nil {
 		logger.Error("fatal error", "error", err)
 		os.Exit(1)
 	}
 
-	a := adapter.NewWithMaxConcurrentTargets(targetsSource, suspensionClient, cfg, maxConcurrentTargets, logger)
 	if err := a.Run(ctx); err != nil {
 		logger.Error("fatal error", "error", err)
 		os.Exit(1)
@@ -273,24 +273,27 @@ func runControllerManager(ctx context.Context, stop context.CancelFunc, start fu
 }
 
 // startHealthServer starts an HTTP server that serves a /healthz endpoint
-// returning 200 OK. The server shuts down gracefully when ctx is cancelled.
+// returning 200 OK while healthy() is true and 503 otherwise. The server shuts down gracefully when ctx is cancelled.
 // It binds to the listener before returning so any port conflict is reported
 // immediately.
-func startHealthServer(ctx context.Context, logger *slog.Logger) error {
+func startHealthServer(ctx context.Context, logger *slog.Logger, addr string, healthy func() bool) error {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/healthz", func(w http.ResponseWriter, _ *http.Request) {
+		if !healthy() {
+			w.WriteHeader(http.StatusServiceUnavailable)
+			return
+		}
 		w.WriteHeader(http.StatusOK)
-		// response body deliberately left empty
 	})
 
-	ln, err := net.Listen("tcp", healthAddr)
+	ln, err := net.Listen("tcp", addr)
 	if err != nil {
-		return fmt.Errorf("listening on health address %s: %w", healthAddr, err)
+		return fmt.Errorf("listening on health address %s: %w", addr, err)
 	}
 
-	srv := &http.Server{Handler: mux, ReadHeaderTimeout: 5 * time.Second, IdleTimeout: 30 * time.Second}
+	srv := &http.Server{Handler: mux, ReadHeaderTimeout: 5 * time.Second, ReadTimeout: 10 * time.Second, IdleTimeout: 30 * time.Second}
 	go func() {
-		logger.Info("health server started", "addr", healthAddr)
+		logger.Info("health server started", "addr", ln.Addr().String())
 		if err := srv.Serve(ln); err != nil && !errors.Is(err, http.ErrServerClosed) {
 			logger.Error("health server error", "error", err)
 		}

@@ -1133,3 +1133,14 @@ func TestReconcileCreationBackoffDoesNotRecordNonCreationFailures(t *testing.T) 
 		})
 	}
 }
+
+func TestHealthy(t *testing.T) {
+	a := New(StaticTargetSource{}, nil, config.Config{PollInterval: time.Second}, slog.Default())
+	if !a.Healthy() {
+		t.Fatal("want healthy right after a cycle")
+	}
+	a.lastCycle.Store(time.Now().Add(-4 * time.Second).UnixNano())
+	if a.Healthy() {
+		t.Fatal("want unhealthy after 3 missed poll intervals")
+	}
+}
