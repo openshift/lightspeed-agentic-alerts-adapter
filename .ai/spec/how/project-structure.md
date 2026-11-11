@@ -25,7 +25,7 @@
 ## Key Entry Points
 
 - `cmd/alerts-adapter/main.go:run()` validates the port and loads the server certificate/key pair before configuration and Kubernetes client initialization. It builds targets, creates an independent `InvestigationService` for the fixed local target, and optionally starts the SpokeCluster controller.
-- `startServer()` opens the listener, serves HTTPS using the preloaded certificate, runs the poller with the shared process context, and coordinates shutdown.
+- `startServer()` opens the listener, serves HTTPS using the certwatcher-managed certificate, runs the poller with the shared process context, and coordinates shutdown.
 - `adapter.Run()` executes an immediate reconcile then enters a ticker loop until context cancellation.
 - The request path is `withTimeout → AuthMiddleware → NewInvestigationHandler → InvestigationService.Investigate`.
 

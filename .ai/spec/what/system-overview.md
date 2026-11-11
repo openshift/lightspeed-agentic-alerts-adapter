@@ -61,5 +61,5 @@ The classic Lightspeed operator deploys the local adapter when `OLSConfig.spec.o
 - Cooldown for analysis-only completion remains a [planned correction](poll-loop.md#post-run-delay-cooldown).
 - An empty receiver allowlist skips all polled alerts, not manual API requests. There is no separate severity filter.
 - The API supports only the local target; when that target is disabled, requests return a generic `500 internal_error`.
-- HTTPS is mandatory. Missing TLS settings or an unloadable certificate/key pair fail startup. Certificates are not hot-reloaded; renewal requires a process restart.
+- HTTPS is mandatory. Missing TLS settings or an unloadable certificate/key pair fail startup. Certificates are validated at startup and reloaded from the mounted files via certwatcher, so renewal does not require a process restart.
 - There is no persistent database, HTTP health endpoint, or Prometheus metrics endpoint in the current adapter.

@@ -39,9 +39,9 @@ flowchart TD
     Next --> Cycle
 ```
 
-`run` validates `HTTPS_PORT` and loads the required TLS certificate/key pair before reading configuration or creating Kubernetes clients. It then loads `/etc/alerts-adapter/config.yaml` once. Invalid YAML or duration syntax exits before client setup. The poller and independent investigation service receive the loaded configuration value; there is no configuration source interface or reload path.
+`run` validates `HTTPS_PORT` and creates the certwatcher for the required TLS certificate/key pair before reading configuration or creating Kubernetes clients. It then loads `/etc/alerts-adapter/config.yaml` once. Invalid YAML or duration syntax exits before client setup. The poller and independent investigation service receive the loaded configuration value; there is no configuration source interface or reload path.
 
-`startServer` opens the listener and serves TLS using the preloaded certificate while the poller runs with the same process context. Serving failures cancel that context. After the poller returns, graceful HTTP shutdown has a five-second deadline; failure falls back to closing the server. The certificate watcher reloads mounted certificate updates for new connections.
+`startServer` opens the listener and serves TLS using the certwatcher-managed certificate while the poller runs with the same process context. Serving failures cancel that context. After the poller returns, graceful HTTP shutdown has a five-second deadline; failure falls back to closing the server. The certificate watcher reloads mounted certificate updates for new connections.
 
 `Run` calls `reconcile` immediately, then creates a ticker. Each reconcile reads the suspension state, performs backoff garbage collection, and takes a registry snapshot. A semaphore bounds target goroutines. Each task gets a context with a deadline of `pollInterval`; a wait group prevents overlapping cycles. Ticker events can be delayed or dropped when work is slow, so this is not a guaranteed delay after each completed cycle.
 
