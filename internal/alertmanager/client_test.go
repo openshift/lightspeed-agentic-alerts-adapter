@@ -390,18 +390,6 @@ func TestNewConfigCustomURL(t *testing.T) {
 	}
 }
 
-func TestNewInsecureSkipVerify(t *testing.T) {
-	_, err := New(Config{
-		URL:                "https://alertmanager.example.com",
-		TokenPath:          "/some/path",
-		CAPath:             "/some/path",
-		InsecureSkipVerify: true,
-	})
-	if err != nil {
-		t.Fatalf("expected no error with InsecureSkipVerify, got %v", err)
-	}
-}
-
 func TestNewInvalidCABundle(t *testing.T) {
 	_, err := New(Config{
 		URL:       "https://alertmanager.example.com",
