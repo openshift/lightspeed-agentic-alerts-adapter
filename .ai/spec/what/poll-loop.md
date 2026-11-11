@@ -69,7 +69,7 @@ The core reconcile loop that continuously polls AlertManager, applies receiver f
 
 31a. Creation backoff SHALL be kept in memory and reset on process restart. Unused entries may expire.
 31b. A newly created AgenticRun SHALL be included in later deduplication checks in the same target cycle.
-31c. Passing cooldown SHALL permit a creation attempt; it SHALL NOT guarantee a new run. An unchanged deterministic name can still return AlreadyExists. Retry names are used for the EmergencyStopped conflict described in [AgenticRun building](agenticrun-building.md#emergencystopped-replacement).
+31c. Passing cooldown SHALL permit a creation attempt; it SHALL NOT guarantee a new run. An unchanged deterministic name can still return AlreadyExists. Retry names are used for the EmergencyStopped conflict described in [AgenticRun building](agenticrun-building.md#retry-names-and-polling-replacement).
 
 ### Graceful Shutdown
 

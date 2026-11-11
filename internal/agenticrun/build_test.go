@@ -1,6 +1,7 @@
 package agenticrun
 
 import (
+	"fmt"
 	"log/slog"
 	"os"
 	"path/filepath"
@@ -414,6 +415,57 @@ func TestNextAvailableName(t *testing.T) {
 		}
 		if !strings.HasSuffix(got, "-retry-1") {
 			t.Errorf("NextAvailableName() = %q, want retry suffix", got)
+		}
+	})
+}
+
+func TestNextAvailableNamePreservesEpisode(t *testing.T) {
+	for _, qualifier := range []string{"", "g-01234567-"} {
+		for _, hash := range []string{"895c8977", "12345678"} {
+			for _, readable := range []string{
+				"alert-ns",
+				strings.Repeat("a", 54-len(qualifier)),
+				strings.Repeat("a", 46-len(qualifier)) + "-segment",
+			} {
+				base := qualifier + readable + "-" + hash
+				for _, occupied := range []int{-1, 0, 1, 9, 99} {
+					t.Run(fmt.Sprintf("%s/occupied=%d", base, occupied), func(t *testing.T) {
+						var existing []string
+						want := base
+						if occupied >= 0 {
+							existing = append(existing, base)
+							for n := 1; n <= occupied+1; n++ {
+								suffix := fmt.Sprintf("-retry-%d", n)
+								available := 63 - len(qualifier) - 9 - len(suffix)
+								prefix := strings.TrimRight(
+									readable[:min(len(readable), available)], "-_.",
+								)
+								candidate := qualifier + prefix + "-" + hash + suffix
+								if n <= occupied {
+									existing = append(existing, candidate)
+								} else {
+									want = candidate
+								}
+							}
+						}
+						got := NextAvailableName(base, existing)
+						if got != want {
+							t.Fatalf("NextAvailableName() = %q, want %q", got, want)
+						}
+						if len(got) > 63 {
+							t.Fatalf("name length = %d, want <= 63", len(got))
+						}
+					})
+				}
+			}
+		}
+	}
+
+	t.Run("uses first free retry despite later occupied suffix", func(t *testing.T) {
+		base := "alert-ns-895c8977"
+		got := NextAvailableName(base, []string{base, base + "-retry-2"})
+		if want := base + "-retry-1"; got != want {
+			t.Fatalf("NextAvailableName() = %q, want %q", got, want)
 		}
 	})
 }

@@ -389,3 +389,17 @@ func TestNewConfigCustomURL(t *testing.T) {
 		t.Errorf("token path = %q, want %q", cfg.TokenPath, defaultTokenPath)
 	}
 }
+
+func TestNewInvalidCABundle(t *testing.T) {
+	_, err := New(Config{
+		URL:       "https://alertmanager.example.com",
+		TokenPath: "/some/path",
+		CABundle:  []byte("not a certificate"),
+	})
+	if err == nil {
+		t.Fatal("expected error for invalid CA bundle, got nil")
+	}
+	if !strings.Contains(err.Error(), "no valid certificates") {
+		t.Errorf("error %q does not mention valid certificates", err.Error())
+	}
+}

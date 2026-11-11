@@ -275,6 +275,7 @@ func (a *Adapter) reconcileTarget(ctx context.Context, target Target) {
 			continue
 		}
 
+		p.Labels[triggerLabel] = "poller"
 		wasCreated, err := target.ARClient.CreateAgenticRun(ctx, p)
 		if err != nil {
 			if ctx.Err() != nil {
