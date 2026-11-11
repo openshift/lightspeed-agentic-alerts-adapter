@@ -375,7 +375,7 @@ func TestInvestigationHandlerResponse(t *testing.T) {
 		},
 		{
 			name: "cancelled during investigation", cancelDuring: true,
-			status: http.StatusCreated,
+			status:   http.StatusCreated,
 			response: `{"namespace":"test-namespace","name":"test-run"}`,
 		},
 		{
@@ -452,4 +452,23 @@ func TestInvestigationHandlerResponse(t *testing.T) {
 			assert.Equal(t, wantChallenge, response.Header().Get("WWW-Authenticate"))
 		})
 	}
+}
+
+func TestAPIErrorMessage(t *testing.T) {
+	assert.Equal(t, "unauthorized", errInvestigationUnauthorized.Error())
+	assert.Equal(t, "invalid_request", errInvalidRequest.Error())
+}
+
+func TestAuthMiddlewareRequestContextCancelled(t *testing.T) {
+	access := authorizeFunc(func(context.Context, string) (AgenticRunCreator, error) {
+		t.Fatal("Authorize must not run for a cancelled request")
+		return nil, nil
+	})
+	handler := AuthMiddleware(access, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		t.Fatal("next handler must not run for a cancelled request")
+	}))
+
+	ctx, cancel := context.WithCancel(t.Context())
+	cancel()
+	handler.ServeHTTP(httptest.NewRecorder(), httptest.NewRequest(http.MethodPost, "/api/v1/investigations", nil).WithContext(ctx))
 }

@@ -41,11 +41,66 @@ func (f accessReviewFunc) Create(
 	return f(ctx, review, opts)
 }
 
+func TestAuthorizeEmptyToken(t *testing.T) {
+	a := &AgenticRunInvestigationRequest{logger: slog.New(slog.NewTextHandler(io.Discard, nil))}
+	_, err := a.Authorize(t.Context(), "")
+	assert.ErrorIs(t, err, errInvestigationUnauthorized)
+}
+
+func TestValidateKubernetesEndpoint(t *testing.T) {
+	tests := []struct {
+		name    string
+		cfg     *rest.Config
+		wantErr bool
+	}{
+		{name: "valid", cfg: &rest.Config{Host: "https://kubernetes.example"}},
+		{name: "http scheme", cfg: &rest.Config{Host: "http://kubernetes.example"}, wantErr: true},
+		{name: "missing host", cfg: &rest.Config{Host: "https://"}, wantErr: true},
+		{name: "userinfo", cfg: &rest.Config{Host: "https://user:pass@kubernetes.example"}, wantErr: true},
+		{name: "insecure TLS", cfg: &rest.Config{Host: "https://kubernetes.example", TLSClientConfig: rest.TLSClientConfig{Insecure: true}}, wantErr: true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := validateKubernetesEndpoint(tt.cfg)
+			if tt.wantErr {
+				assert.Error(t, err)
+			} else {
+				assert.NoError(t, err)
+			}
+		})
+	}
+}
+
+func TestNewAgenticRunInvestigationRequestRejectsHTTPEndpoint(t *testing.T) {
+	scheme := runtime.NewScheme()
+	if !assert.NoError(t, agenticv1alpha1.AddToScheme(scheme)) {
+		return
+	}
+	_, err := NewAgenticRunInvestigationRequest(
+		&rest.Config{Host: "http://kubernetes.example"},
+		fake.NewClientBuilder().WithScheme(scheme).Build(),
+		"test-namespace", "", slog.New(slog.NewTextHandler(io.Discard, nil)),
+	)
+	assert.ErrorContains(t, err, "HTTPS")
+}
+
+func TestNewSelfSubjectAccessReviews(t *testing.T) {
+	_, err := newSelfSubjectAccessReviews(&rest.Config{Host: "://invalid"})
+	assert.Error(t, err)
+
+	reviews, err := newSelfSubjectAccessReviews(&rest.Config{Host: "https://kubernetes.example"})
+	if assert.NoError(t, err) {
+		assert.NotNil(t, reviews)
+	}
+}
+
 func TestAuthorize(t *testing.T) {
 	tests := []struct {
 		name            string
 		unauthenticated bool
 		tokenError      string
+		reviewError     error
+		factoryError    error
 		allowed         bool
 		evaluationError string
 		accessError     error
@@ -59,6 +114,10 @@ func TestAuthorize(t *testing.T) {
 		{
 			name:       "TokenReview error while authenticated",
 			tokenError: "test failure", wantErr: errInternal,
+		},
+		{
+			name:        "TokenReview request failure",
+			reviewError: errors.New("test failure"), wantErr: errInternal,
 		},
 		{
 			name:            "TokenReview error while unauthenticated",
@@ -86,6 +145,11 @@ func TestAuthorize(t *testing.T) {
 				"", errors.New("test failure"),
 			),
 			wantErr: errInvestigationForbidden,
+		},
+		{
+			name:    "review client factory failure",
+			allowed: true, factoryError: errors.New("test failure"),
+			wantErr: errInternal,
 		},
 		{
 			name:        "review request failure",
@@ -121,6 +185,9 @@ func TestAuthorize(t *testing.T) {
 				_ metav1.CreateOptions,
 			) (*authenticationv1.TokenReview, error) {
 				tokenCalls++
+				if tt.reviewError != nil {
+					return nil, tt.reviewError
+				}
 				assert.True(t, gotCtx == ctx, "TokenReview must preserve context")
 				assert.Equal(t, "test-only-caller", review.Spec.Token)
 				assert.Empty(t, review.Spec.Audiences)
@@ -135,6 +202,9 @@ func TestAuthorize(t *testing.T) {
 				callerConfig *rest.Config,
 			) (authorizationclient.SelfSubjectAccessReviewInterface, error) {
 				factoryCalls++
+				if tt.factoryError != nil {
+					return nil, tt.factoryError
+				}
 				assert.Equal(t, 1, tokenCalls, "TokenReview must run first")
 				expected := rest.AnonymousClientConfig(cfg)
 				expected.BearerToken = "test-only-caller"
@@ -174,11 +244,15 @@ func TestAuthorize(t *testing.T) {
 				assert.Nil(t, creator)
 			}
 			wantAccessCalls := 1
-			if tt.unauthenticated || tt.tokenError != "" {
+			if tt.reviewError != nil || tt.unauthenticated || tt.tokenError != "" {
+				wantAccessCalls = 0
+			}
+			wantFactoryCalls := wantAccessCalls
+			if tt.factoryError != nil {
 				wantAccessCalls = 0
 			}
 			assert.Equal(t, 1, tokenCalls)
-			assert.Equal(t, wantAccessCalls, factoryCalls)
+			assert.Equal(t, wantFactoryCalls, factoryCalls)
 			assert.Equal(t, wantAccessCalls, accessCalls)
 			assert.Equal(t, original, cfg)
 			assert.Empty(t, a.anonymous.BearerToken)
