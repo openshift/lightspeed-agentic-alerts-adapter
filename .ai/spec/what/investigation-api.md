@@ -84,7 +84,7 @@ Error:
 
 - Callers need permission to create SelfSubjectAccessReviews and AgenticRuns in the adapter namespace. The adapter needs cluster-scoped TokenReview create permission; impersonation and SubjectAccessReview permissions are not required.
 - Native AgenticRun create permission also permits direct Kubernetes creation. Adapter-specific restrictions do not govern those direct requests without equivalent admission controls.
-- Body/header limits, deadline propagation, connection timeouts, mandatory TLS, and certificate-restart behavior are defined in [configuration](configuration.md#fixed-https-limits).
+- Body/header limits, deadline propagation, connection timeouts, mandatory TLS, and certificate hot reload are defined in [configuration](configuration.md#fixed-https-limits).
 - Errors generated before the handler may use standard HTTP responses rather than the JSON structure. Disconnected clients may receive no response.
 - UI routing and external transport deployment are outside this component's API contract.
 - Focused mock-based tests cover application behavior. Service CA trust, real authorization/admission, auditing, credential isolation across concurrent callers, and concurrent API/poller creation still require integration verification.

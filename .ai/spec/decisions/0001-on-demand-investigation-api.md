@@ -178,7 +178,7 @@ For API-created runs, the Kubernetes create request is authenticated as the call
 
 ## Open points
 
-Authorization, Kubernetes creation identity, numerical limits, and mandatory listener TLS are implemented. Certificates are loaded once at startup with no HTTP fallback; renewal requires a process restart, with no hot reload or automatic restart.
+Authorization, Kubernetes creation identity, numerical limits, and mandatory listener TLS are implemented. Certificates are validated at startup and hot-reloaded from the mounted files via certwatcher, with no HTTP fallback; renewal does not require a process restart.
 
 Before production exposure, verify Service CA trust, caller-token compatibility with the Kubernetes API-server audience, actual authorization/admission behavior, audit attribution, and concurrent caller/API/poller isolation on a cluster. External UI routing remains outside this decision. Focused local tests do not replace these integration checks.
 
