@@ -44,6 +44,8 @@ func main() {
 	slog.SetDefault(logger)
 	ctrl.SetLogger(logr.FromSlogHandler(logger.Handler()))
 
+	checkFIPSMode(logger)
+
 	maxConcurrentTargets, err := multiclusterMaxConcurrentTargets(*multicluster)
 	if err != nil {
 		logger.Error("fatal error", "error", err)

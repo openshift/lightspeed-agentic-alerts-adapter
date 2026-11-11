@@ -21,7 +21,7 @@ E2E_IMAGE_REF = openshift-lightspeed/$(BINARY_NAME):e2e
 all: build
 
 build:
-	$(GO) build $(GOFLAGS) -ldflags "$(LDFLAGS)" -o $(BIN_DIR)/$(BINARY_NAME) $(CMD_DIR)
+	GOFIPS140=certified $(GO) build $(GOFLAGS) -ldflags "$(LDFLAGS)" -o $(BIN_DIR)/$(BINARY_NAME) $(CMD_DIR)
 
 test:
 	$(GO) test $(GOFLAGS) -coverprofile=coverage.out -covermode=atomic $$($(GO) list ./... | grep -v /test/e2e)
