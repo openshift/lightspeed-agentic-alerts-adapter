@@ -8,6 +8,7 @@ import (
 	"slices"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	agenticv1alpha1 "github.com/openshift/lightspeed-agentic-operator/api/v1alpha1"
@@ -76,6 +77,7 @@ type Adapter struct {
 	logger               *slog.Logger
 	creationBackoff      *flowcontrol.Backoff
 	now                  func() time.Time
+	lastCycle            atomic.Int64 // unix nanos of the last poll progress (target or cycle finished)
 }
 
 // New creates an Adapter with the given reconciliation targets, config, and logger.
@@ -86,7 +88,7 @@ func New(targets TargetSource, suspension SuspensionSource, cfg config.Config, l
 // NewWithMaxConcurrentTargets creates an Adapter that reconciles no more than
 // maxConcurrentTargets targets simultaneously.
 func NewWithMaxConcurrentTargets(targets TargetSource, suspension SuspensionSource, cfg config.Config, maxConcurrentTargets int, logger *slog.Logger) *Adapter {
-	return &Adapter{
+	a := &Adapter{
 		targets:              targets,
 		suspension:           suspension,
 		cfg:                  cfg,
@@ -95,6 +97,18 @@ func NewWithMaxConcurrentTargets(targets TargetSource, suspension SuspensionSour
 		creationBackoff:      flowcontrol.NewBackOff(creationBackoffInitial, creationBackoffMax),
 		now:                  time.Now,
 	}
+	a.lastCycle.Store(time.Now().UnixNano())
+	return a
+}
+
+// beat records poll-loop progress for Healthy.
+func (a *Adapter) beat() { a.lastCycle.Store(time.Now().UnixNano()) }
+
+// Healthy reports whether the poll loop made progress (a target or a cycle
+// finished) within the last 3 poll intervals. Targets are capped at one poll
+// interval, so long multi-target cycles stay healthy while a stuck loop does not.
+func (a *Adapter) Healthy() bool {
+	return time.Since(time.Unix(0, a.lastCycle.Load())) < 3*a.cfg.PollInterval
 }
 
 // Run starts the poll loop, blocking until the context is cancelled.
@@ -122,7 +136,9 @@ func (a *Adapter) Run(ctx context.Context) error {
 	}
 }
 
+// reconcile runs one poll cycle across all targets and always records a heartbeat.
 func (a *Adapter) reconcile(ctx context.Context) {
+	defer a.beat()
 	a.logger.Debug("poll cycle start")
 
 	suspended, err := a.suspension.Suspended(ctx)
@@ -158,6 +174,7 @@ func (a *Adapter) reconcile(ctx context.Context) {
 		go func(target Target) {
 			defer wg.Done()
 			defer func() { <-semaphore }()
+			defer a.beat()
 			targetCtx, cancel := context.WithTimeout(ctx, a.cfg.PollInterval)
 			defer cancel()
 			a.reconcileTarget(targetCtx, target)
@@ -167,6 +184,7 @@ func (a *Adapter) reconcile(ctx context.Context) {
 	wg.Wait()
 }
 
+// reconcileTarget fetches alerts and runs for one target and creates AgenticRuns for eligible alerts.
 func (a *Adapter) reconcileTarget(ctx context.Context, target Target) {
 	alerts, err := target.Alerts.GetAlerts(ctx)
 	if err != nil {
@@ -329,6 +347,7 @@ func (a *Adapter) reconcileTarget(ctx context.Context, target Target) {
 	)
 }
 
+// backoff returns the creation backoff, falling back to a new one when unset.
 func (a *Adapter) backoff() *flowcontrol.Backoff {
 	if a.creationBackoff != nil {
 		return a.creationBackoff
@@ -336,6 +355,7 @@ func (a *Adapter) backoff() *flowcontrol.Backoff {
 	return flowcontrol.NewBackOff(creationBackoffInitial, creationBackoffMax)
 }
 
+// currentTime returns the injected clock time, or time.Now when none is set.
 func (a *Adapter) currentTime() time.Time {
 	if a.now != nil {
 		return a.now()
@@ -343,10 +363,12 @@ func (a *Adapter) currentTime() time.Time {
 	return time.Now()
 }
 
+// creationBackoffKey builds the per-target, per-alert key for creation backoff.
 func creationBackoffKey(targetName, stableFingerprint string) string {
 	return targetName + "\x00" + stableFingerprint
 }
 
+// skipReceiver reports whether none of the alert's receivers are in the allowlist.
 func skipReceiver(alert *models.GettableAlert, allowed []string) bool {
 	for _, r := range alert.Receivers {
 		if r == nil || r.Name == nil {
@@ -359,6 +381,7 @@ func skipReceiver(alert *models.GettableAlert, allowed []string) bool {
 	return true
 }
 
+// receiverNames returns the non-nil receiver names of an alert.
 func receiverNames(alert *models.GettableAlert) []string {
 	names := make([]string, 0, len(alert.Receivers))
 	for _, r := range alert.Receivers {
@@ -369,6 +392,7 @@ func receiverNames(alert *models.GettableAlert) []string {
 	return names
 }
 
+// tooEarly reports whether the alert has fired for less than threshold, or has no start time.
 func tooEarly(alert *models.GettableAlert, now time.Time, threshold time.Duration) bool {
 	if alert.StartsAt == nil {
 		return true
@@ -376,6 +400,7 @@ func tooEarly(alert *models.GettableAlert, now time.Time, threshold time.Duratio
 	return now.Sub(time.Time(*alert.StartsAt)) < threshold
 }
 
+// hasActiveRun reports whether a non-terminal run exists for the fingerprint.
 func hasActiveRun(stableFingerprint string, runs []agenticv1alpha1.AgenticRun) bool {
 	for i := range runs {
 		if runs[i].Labels[agenticrun.LabelDedupFingerprint] != stableFingerprint {
@@ -412,6 +437,7 @@ func runNames(runs []agenticv1alpha1.AgenticRun) []string {
 	return names
 }
 
+// tooRecent reports whether a run for the fingerprint reached a terminal state within window.
 func tooRecent(stableFingerprint string, runs []agenticv1alpha1.AgenticRun, now time.Time, window time.Duration) bool {
 	for i := range runs {
 		if runs[i].Labels[agenticrun.LabelDedupFingerprint] != stableFingerprint {
@@ -459,6 +485,7 @@ func terminalTime(p *agenticv1alpha1.AgenticRun) *time.Time {
 	return nil
 }
 
+// findFailedConditionType returns the type of the first False condition, or "".
 func findFailedConditionType(conditions []metav1.Condition) string {
 	for i := range conditions {
 		if conditions[i].Status == metav1.ConditionFalse {
@@ -468,6 +495,7 @@ func findFailedConditionType(conditions []metav1.Condition) string {
 	return ""
 }
 
+// isTerminal reports whether the phase is a final AgenticRun phase.
 func isTerminal(phase agenticv1alpha1.AgenticRunPhase) bool {
 	switch phase {
 	case agenticv1alpha1.AgenticRunPhaseCompleted,

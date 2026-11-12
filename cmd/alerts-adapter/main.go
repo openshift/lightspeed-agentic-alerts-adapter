@@ -6,10 +6,13 @@ import (
 	"flag"
 	"fmt"
 	"log/slog"
+	"net"
+	"net/http"
 	"os"
 	"os/signal"
 	"strconv"
 	"syscall"
+	"time"
 
 	"github.com/go-logr/logr"
 	agenticv1alpha1 "github.com/openshift/lightspeed-agentic-operator/api/v1alpha1"
@@ -32,8 +35,11 @@ import (
 const (
 	maxConcurrentTargetsEnv                 = "MULTICLUSTER_MAX_CONCURRENT_TARGETS"
 	defaultMulticlusterMaxConcurrentTargets = 4
+
+	healthAddr = ":8081"
 )
 
+// main wires the adapter, its health server, and (in multicluster mode) the target manager, then runs the poll loop.
 func main() {
 	multicluster := flag.Bool("multicluster", false, "enable multicluster alert discovery")
 	flag.Parse()
@@ -91,6 +97,11 @@ func main() {
 	}
 
 	a := adapter.NewWithMaxConcurrentTargets(targetsSource, suspensionClient, cfg, maxConcurrentTargets, logger)
+	if err := startHealthServer(ctx, logger, healthAddr, a.Healthy); err != nil {
+		logger.Error("fatal error", "error", err)
+		os.Exit(1)
+	}
+
 	if err := a.Run(ctx); err != nil {
 		logger.Error("fatal error", "error", err)
 		os.Exit(1)
@@ -105,6 +116,7 @@ func main() {
 	}
 }
 
+// multiclusterMaxConcurrentTargets returns the target concurrency: 1 outside multicluster mode, otherwise the env override or default.
 func multiclusterMaxConcurrentTargets(multicluster bool) (int, error) {
 	if !multicluster {
 		return 1, nil
@@ -122,6 +134,7 @@ func multiclusterMaxConcurrentTargets(multicluster bool) (int, error) {
 	return maxConcurrentTargets, nil
 }
 
+// newClient builds a Kubernetes client from the in-cluster or local kubeconfig.
 func newClient() (client.Client, error) {
 	cfg, err := ctrl.GetConfig()
 	if err != nil {
@@ -262,4 +275,40 @@ func runControllerManager(ctx context.Context, stop context.CancelFunc, start fu
 		stop()
 	}()
 	return errCh
+}
+
+// startHealthServer starts an HTTP server that serves a /healthz endpoint
+// returning 200 OK while healthy() is true and 503 otherwise. It listens on
+// addr and shuts down when ctx is cancelled. It binds the listener before
+// returning so any port conflict is reported immediately.
+func startHealthServer(ctx context.Context, logger *slog.Logger, addr string, healthy func() bool) error {
+	mux := http.NewServeMux()
+	mux.HandleFunc("/healthz", func(w http.ResponseWriter, _ *http.Request) {
+		if !healthy() {
+			w.WriteHeader(http.StatusServiceUnavailable)
+			return
+		}
+		w.WriteHeader(http.StatusOK)
+	})
+
+	ln, err := net.Listen("tcp", addr)
+	if err != nil {
+		return fmt.Errorf("listening on health address %s: %w", addr, err)
+	}
+
+	srv := &http.Server{Handler: mux, ReadHeaderTimeout: 5 * time.Second, ReadTimeout: 10 * time.Second, IdleTimeout: 30 * time.Second}
+	go func() {
+		logger.Info("health server started", "addr", ln.Addr().String())
+		if err := srv.Serve(ln); err != nil && !errors.Is(err, http.ErrServerClosed) {
+			logger.Error("health server error", "error", err)
+		}
+	}()
+	go func() {
+		<-ctx.Done()
+		if err := srv.Close(); err != nil {
+			logger.Error("closing health server", "error", err)
+		}
+	}()
+
+	return nil
 }
