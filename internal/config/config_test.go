@@ -70,6 +70,27 @@ func TestLoadFromFile(t *testing.T) {
 			wantPreRunDelay:  DefaultPreRunDelay,
 			wantPostRunDelay: DefaultPostRunDelay,
 		},
+		{
+			name:             "quoted durations",
+			yaml:             "pollInterval: '45s'\npreRunDelay: \"10m\"\npostRunDelay: '30m'\n",
+			wantPollInterval: 45 * time.Second,
+			wantPreRunDelay:  10 * time.Minute,
+			wantPostRunDelay: 30 * time.Minute,
+		},
+		{
+			name:             "duration aliases",
+			yaml:             "pollInterval: &delay 45s\npreRunDelay: *delay\npostRunDelay: *delay\n",
+			wantPollInterval: 45 * time.Second,
+			wantPreRunDelay:  45 * time.Second,
+			wantPostRunDelay: 45 * time.Second,
+		},
+		{
+			name:             "null durations use defaults",
+			yaml:             "pollInterval: null\npreRunDelay: null\npostRunDelay: null\n",
+			wantPollInterval: DefaultPollInterval,
+			wantPreRunDelay:  DefaultPreRunDelay,
+			wantPostRunDelay: DefaultPostRunDelay,
+		},
 	}
 
 	for _, tt := range tests {
@@ -114,6 +135,18 @@ func TestLoadFromFileInvalid(t *testing.T) {
 		{
 			name: "invalid postRunDelay",
 			yaml: "postRunDelay: xyz\n",
+		},
+		{
+			name: "duplicate duration key",
+			yaml: "pollInterval: 30s\npollInterval: 45s\n",
+		},
+		{
+			name: "duration cannot be a sequence",
+			yaml: "pollInterval: [30s]\n",
+		},
+		{
+			name: "duration cannot be a mapping",
+			yaml: "pollInterval: {value: 30s}\n",
 		},
 	}
 
