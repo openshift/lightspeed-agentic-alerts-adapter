@@ -18,7 +18,7 @@ RUN CGO_ENABLED=0 GOFIPS140=certified GOAMD64=v2 GOOS=${TARGETOS:-linux} GOARCH=
 # Verify alerts-adapter targets at most x86-64-v2 (no-op on non-amd64)
 RUN go build -o check-isa-level ./cmd/check-isa-level && ./check-isa-level ./alerts-adapter
 
-FROM registry.access.redhat.com/ubi9-micro:9.8-1791895366@sha256:5be877a2a280ae36eb9ab80ca4efb28bbf77c57abbba38137cdc37a03b8465e6
+FROM registry.access.redhat.com/ubi9-micro:1794478350@sha256:dbd325b96bcd432dd42816d31412bdf1dc0fb973b79ed310344bc23c76c068db
 
 LABEL name="openshift-lightspeed/lightspeed-agentic-alerts-adapter-rhel9" \
       cpe="cpe:/a:redhat:openshift_lightspeed:2::el9" \      
