@@ -25,7 +25,7 @@ The adapter can also be deployed directly with [manifests/](manifests/). This de
 
 The direct deployment exposes an internal HTTPS Service on port `8443`. Its OpenShift Service CA annotation requests the `lightspeed-agentic-alerts-adapter-tls` Secret, mounted read-only at `/etc/tls/private`. Clients must trust the Service CA and verify the Service DNS name.
 
-HTTPS is mandatory, with TLS 1.2 as the minimum version. `HTTPS_PORT` defaults to `8443` and binds on all available interfaces. `TLS_CERT_FILE` and `TLS_KEY_FILE` are required; missing settings or an unloadable certificate/key pair fail startup before Kubernetes clients or the poller start. There is no plaintext fallback.
+HTTPS is mandatory, with TLS 1.2 as the minimum version. `HTTPS_PORT` defaults to `8443` and binds on all available interfaces. `TLS_CERT_FILE` and `TLS_KEY_FILE` are required when the investigation server runs (a local Alertmanager target exists); hub multicluster deployments without a local target skip the server and need neither setting. There is no plaintext fallback.
 
 Certificates are validated at startup and reloaded from the mounted files by controller-runtime's `certwatcher`, using filesystem events and a default 10-second polling interval. Successful reloads apply to new TLS connections without a pod restart; failed reloads retain the last valid certificate. Secret mounts must not use `subPath` if automatic updates are required. These runtime requirements also apply to operator-managed deployments, which must supply their own TLS configuration; this repository only updates its direct deployment manifests.
 
@@ -49,7 +49,7 @@ flowchart TD
     Create --> Response[201 namespace and name]
 ```
 
-The auth middleware first submits TokenReview using the adapter's ServiceAccount. It then checks create permission using SelfSubjectAccessReview authenticated as the caller. Both checks fail closed. Auth runs before body parsing or internal reads.
+The auth middleware submits a SelfSubjectAccessReview authenticated with the caller's bearer token; the Kubernetes API server rejects invalid or expired tokens with 401, and the review result enforces create permission. Both outcomes fail closed. Auth runs before body parsing or internal reads.
 
 On success, the middleware places a request-scoped `AgenticRunCreator` in the context under a private key. The handler receives an `Investigator` interface implemented by `InvestigationService`, not the poller instance. The service receives the fixed local target, suspension reader, and configuration explicitly.
 
@@ -149,7 +149,7 @@ Local AlertManager access uses the pod's ServiceAccount token, read on each requ
 
 The deployment needs permission to create/list runs in its namespace, read the suspension singleton, and access local AlertManager when enabled. Multicluster mode also needs list/watch/get access to SpokeClusters and get access to credential Secrets. [manifests/rbac.yaml](manifests/rbac.yaml) contains the direct deployment permissions.
 
-API authentication additionally requires the adapter's ServiceAccount to create cluster-scoped TokenReviews. Callers need permission to create SelfSubjectAccessReviews and AgenticRuns in the adapter namespace. The design does not require impersonation or SubjectAccessReview permissions.
+Callers need permission to create SelfSubjectAccessReviews and AgenticRuns in the adapter namespace. The adapter itself needs no authentication, impersonation, or SubjectAccessReview permissions. The design does not require impersonation or SubjectAccessReview permissions.
 
 AgenticRun create permission also lets callers create runs directly through Kubernetes. Adapter-specific restrictions do not govern those requests unless equivalent admission controls exist. Configured Kubernetes auditing can attribute API-triggered creation to the caller; object metadata does not automatically record a creator.
 

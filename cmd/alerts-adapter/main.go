@@ -74,16 +74,6 @@ func run(multicluster bool, logger *slog.Logger) error {
 		return errors.New("HTTPS_PORT must be an integer between 1 and 65535")
 	}
 
-	tlsCertFile := os.Getenv("TLS_CERT_FILE")
-	tlsKeyFile := os.Getenv("TLS_KEY_FILE")
-	if tlsCertFile == "" || tlsKeyFile == "" {
-		return errors.New("TLS_CERT_FILE and TLS_KEY_FILE must be set")
-	}
-	certificateWatcher, err := certwatcher.New(tlsCertFile, tlsKeyFile)
-	if err != nil {
-		return fmt.Errorf("initializing TLS certificate watcher: %w", err)
-	}
-
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGTERM, syscall.SIGINT)
 	defer stop()
 
@@ -106,17 +96,6 @@ func run(multicluster bool, logger *slog.Logger) error {
 		namespace = agenticrun.RunNamespace
 	}
 
-	localTarget := ""
-	if multicluster {
-		localTarget = "local"
-	}
-	access, err := adapter.NewAgenticRunInvestigationRequest(
-		restConfig, k8sClient, namespace, localTarget, logger,
-	)
-	if err != nil {
-		return fmt.Errorf("initializing authentication client: %w", err)
-	}
-
 	suspensionClient := agenticolsconfig.NewClient(k8sClient)
 
 	targets, err := newTargets(ctx, k8sClient, namespace, multicluster, logger)
@@ -134,21 +113,54 @@ func run(multicluster bool, logger *slog.Logger) error {
 	}
 
 	var localInvestigationTarget adapter.Target
+	hasLocalTarget := false
 	for _, target := range targets {
 		if target.Name == "local" && target.ID == "" {
 			localInvestigationTarget = target
+			hasLocalTarget = true
 			break
 		}
 	}
-	investigationService := adapter.NewInvestigationService(
-		localInvestigationTarget, suspensionClient, cfg, logger,
-	)
 
 	alertsAdapter := adapter.NewWithMaxConcurrentTargets(targetsSource, suspensionClient, cfg, maxConcurrentTargets, logger)
 	if err := startHealthServer(ctx, logger, healthAddr, alertsAdapter.Healthy); err != nil {
 		logger.Error("fatal error", "error", err)
 		os.Exit(1)
 	}
+
+	if !hasLocalTarget {
+		// Hub deployments run in multicluster mode with no local Alertmanager
+		// target; they have no investigation API to serve and set no TLS files.
+		logger.Info("no local alertmanager target; skipping investigation server")
+		runErr := alertsAdapter.Run(ctx)
+		stop()
+		return errors.Join(runErr, managerError(managerErr))
+	}
+
+	localTarget := ""
+	if multicluster {
+		localTarget = "local"
+	}
+	access, err := adapter.NewAgenticRunInvestigationRequest(
+		restConfig, k8sClient, namespace, localTarget, logger,
+	)
+	if err != nil {
+		return fmt.Errorf("initializing authentication client: %w", err)
+	}
+
+	tlsCertFile := os.Getenv("TLS_CERT_FILE")
+	tlsKeyFile := os.Getenv("TLS_KEY_FILE")
+	if tlsCertFile == "" || tlsKeyFile == "" {
+		return errors.New("TLS_CERT_FILE and TLS_KEY_FILE must be set")
+	}
+	certificateWatcher, err := certwatcher.New(tlsCertFile, tlsKeyFile)
+	if err != nil {
+		return fmt.Errorf("initializing TLS certificate watcher: %w", err)
+	}
+
+	investigationService := adapter.NewInvestigationService(
+		localInvestigationTarget, suspensionClient, cfg, logger,
+	)
 
 	server := adapter.NewInvestigationServer(
 		net.JoinHostPort("", strconv.Itoa(port)),
@@ -167,17 +179,20 @@ func run(multicluster bool, logger *slog.Logger) error {
 
 	serverErr := startServer(ctx, stop, server, alertsAdapter.Run)
 	stop()
-	if err := errors.Join(serverErr, <-watcherErr); err != nil {
+	return errors.Join(serverErr, <-watcherErr, managerError(managerErr))
+}
+
+// managerError reports an early SpokeCluster controller exit, if any.
+func managerError(managerErr <-chan error) error {
+	if managerErr == nil {
+		return nil
+	}
+	select {
+	case err := <-managerErr:
 		return err
+	default:
+		return nil
 	}
-	if managerErr != nil {
-		select {
-		case err := <-managerErr:
-			return err
-		default:
-		}
-	}
-	return nil
 }
 
 // startServer runs the investigation HTTP server alongside the poll loop and

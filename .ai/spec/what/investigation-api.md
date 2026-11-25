@@ -14,9 +14,9 @@ Creates a local alert investigation on behalf of an authenticated Kubernetes cal
 
 ### Authentication and Authorization
 
-6. TokenReview SHALL use the adapter's ServiceAccount, with `spec.audiences` unset to validate against the Kubernetes API-server default audience. Call failures SHALL return generic `500 internal_error`, including failures of the adapter's own credentials.
-7. A completed TokenReview with `status.authenticated=false` SHALL return `401 unauthorized` without an error log, regardless of `status.error`. The adapter SHALL NOT proceed to authorization or internal reads.
-8. A completed TokenReview with `status.authenticated=true` and non-empty `status.error` SHALL return generic `500 internal_error`. Only authenticated results with an empty error SHALL proceed.
+6. The caller's bearer token SHALL be authenticated by the Kubernetes API server directly on the SelfSubjectAccessReview request; the adapter SHALL NOT submit a separate TokenReview. This removes the adapter's cluster-scoped TokenReview permission and one API-server round-trip per request.
+7. An invalid, expired, or otherwise rejected token SHALL cause the SelfSubjectAccessReview to fail with `401 Unauthorized`, which SHALL return `401 unauthorized` to the caller without proceeding to internal reads.
+8. Authorization request failures other than caller `401`/`403` SHALL return generic `500 internal_error`, including failures of the adapter's own connection to the API server.
 9. Authorization SHALL submit a SelfSubjectAccessReview using the caller's token, with resource attributes `group=agentic.openshift.io`, `resource=agenticruns`, `verb=create`, and the adapter namespace.
 10. A non-empty review evaluation error SHALL return `500`, even when allowed is true. Without an evaluation error, allowed=false SHALL return `403 forbidden`. Caller-authenticated review request failures SHALL map `401`/`403` to caller errors and all other failures to generic `500`.
 11. Caller clients SHALL start from `rest.AnonymousClientConfig`, retain only trusted API-server connection settings with verified TLS, and authenticate only with the request token. ServiceAccount token files, client credentials, auth/exec providers, impersonation, and credential-bearing transports SHALL NOT be retained. Schema and REST mapping SHALL be reused independently of caller authentication.
@@ -82,7 +82,7 @@ Error:
 
 ## Constraints and Verification
 
-- Callers need permission to create SelfSubjectAccessReviews and AgenticRuns in the adapter namespace. The adapter needs cluster-scoped TokenReview create permission; impersonation and SubjectAccessReview permissions are not required.
+- Callers need permission to create SelfSubjectAccessReviews and AgenticRuns in the adapter namespace. The adapter needs no authentication or impersonation permissions; SubjectAccessReview permissions are not required.
 - Native AgenticRun create permission also permits direct Kubernetes creation. Adapter-specific restrictions do not govern those direct requests without equivalent admission controls.
 - Body/header limits, deadline propagation, connection timeouts, mandatory TLS, and certificate hot reload are defined in [configuration](configuration.md#fixed-https-limits).
 - Errors generated before the handler may use standard HTTP responses rather than the JSON structure. Disconnected clients may receive no response.

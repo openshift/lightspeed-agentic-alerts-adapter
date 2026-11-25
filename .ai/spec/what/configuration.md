@@ -58,7 +58,7 @@ The adapter reads application settings from `/etc/alerts-adapter/config.yaml` on
 ### HTTPS Listener
 
 26. `HTTPS_PORT` SHALL select the HTTPS listener port. An unset or empty value SHALL use `8443`. A value that cannot be parsed as an integer from 1 through 65535 SHALL fail startup. The listener SHALL bind with an empty host on all available interfaces; there is no `HTTP_HOST` setting.
-27. `TLS_CERT_FILE` and `TLS_KEY_FILE` SHALL both be non-empty. The process SHALL load their certificate/key pair before creating Kubernetes clients or starting the poller. Missing settings or a pair that cannot be loaded SHALL fail startup.
+27. When the investigation server runs (a local Alertmanager target exists), `TLS_CERT_FILE` and `TLS_KEY_FILE` SHALL both be non-empty and their certificate/key pair SHALL load before the server starts; missing settings or an unloadable pair SHALL fail startup. When no local target exists (hub multicluster deployments), the investigation server SHALL NOT start and these settings SHALL NOT be required.
 28. HTTPS SHALL require TLS 1.2 or newer, with no plaintext fallback. Certificates SHALL be validated at startup and reloaded from mounted files using controller-runtime certwatcher. Reload failures SHALL retain the last valid certificate; successful reloads SHALL apply to new TLS connections without a process restart.
 
 ### Fixed HTTPS Limits
@@ -97,8 +97,8 @@ The adapter reads application settings from `/etc/alerts-adapter/config.yaml` on
 | `agent.verification` | Shared fallback | Verification agent override |
 | `POD_NAMESPACE` | `openshift-lightspeed` | Namespace for runs and credential Secrets |
 | `HTTPS_PORT` | `8443` | HTTPS listener port on all available interfaces |
-| `TLS_CERT_FILE` | Required | Server certificate path |
-| `TLS_KEY_FILE` | Required | Server private-key path |
+| `TLS_CERT_FILE` | Required when serving the investigation API | Server certificate path |
+| `TLS_KEY_FILE` | Required when serving the investigation API | Server private-key path |
 
 ## Deployment Integration
 

@@ -52,8 +52,7 @@ Within a target, alerts are processed in sequence. Retrieval or listing failure 
 ```mermaid
 flowchart TD
     Request[POST investigation over HTTPS] --> Deadline[withTimeout: derive request context]
-    Deadline --> Token[TokenReview using ServiceAccount]
-    Token --> Access[SelfSubjectAccessReview using caller token]
+    Deadline --> Access[SelfSubjectAccessReview using caller token]
     Access --> Creator[Attach caller creator to context]
     Creator --> Parse[Validate bounded fingerprint body]
     Parse --> Suspension[Read suspension using internal client]
@@ -92,7 +91,7 @@ Detailed selection, authentication precedence, and HTTP errors are defined in [i
 | Adapter startup | Deployment owner | YAML file mounted at `/etc/alerts-adapter/config.yaml` |
 | HTTPS listener | OpenShift Service CA / deployment owner | Serving-certificate Secret mounted read-only; pair loaded at startup |
 | API caller | Adapter | Bearer-authenticated HTTPS POST through the internal Service |
-| Auth middleware | Kubernetes | ServiceAccount TokenReview followed by caller-authenticated SelfSubjectAccessReview |
+| Auth middleware | Kubernetes | Caller-authenticated SelfSubjectAccessReview; the API server rejects invalid tokens with 401 |
 | Investigation service | AlertManager / Kubernetes | Internal reads followed by caller-authenticated run creation |
 | Poll loop | AlertManager | Authenticated HTTPS requests through the generated API client |
 | Poll loop | Kubernetes | List/create AgenticRuns and read suspension state |

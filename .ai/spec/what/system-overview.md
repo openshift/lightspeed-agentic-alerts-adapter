@@ -8,7 +8,7 @@ The alerts adapter polls OpenShift AlertManager and accepts authenticated HTTPS 
 
 1. The adapter SHALL poll AlertManager at a configurable interval (default 30 seconds), fetch active alerts, and create runs that pass filtering and deduplication.
 1a. The adapter SHALL expose `POST /api/v1/investigations` over HTTPS for on-demand investigation of local AlertManager alerts.
-1b. API requests SHALL authenticate through TokenReview and authorize through caller-authenticated SelfSubjectAccessReview before body parsing or internal reads. Final creation SHALL use a request-scoped caller-authenticated client, with no ServiceAccount fallback.
+1b. API requests SHALL authenticate and authorize through a caller-authenticated SelfSubjectAccessReview before body parsing or internal reads. Final creation SHALL use a request-scoped caller-authenticated client, with no ServiceAccount fallback.
 2. The adapter SHALL run as a single-replica deployment. The default namespace SHALL be `openshift-lightspeed`.
 3. The adapter SHALL run an immediate poll on startup so it can see alerts still firing after a restart. Alerts that resolve during downtime may not be seen.
 4. All AgenticRuns SHALL be created in the adapter namespace selected by `POD_NAMESPACE`.
@@ -47,8 +47,8 @@ File fields and defaults are defined in [configuration](configuration.md#configu
 | `--multicluster` | `false` | Enable spoke discovery alongside any local target |
 | `MULTICLUSTER_MAX_CONCURRENT_TARGETS` | `4` | Positive target concurrency limit in multicluster mode; ignored in single-cluster mode |
 | `HTTPS_PORT` | `8443` | HTTPS listener port on all available interfaces |
-| `TLS_CERT_FILE` | Required | Server certificate path, loaded at startup |
-| `TLS_KEY_FILE` | Required | Server private-key path, loaded at startup |
+| `TLS_CERT_FILE` | Required when serving the investigation API | Server certificate path, loaded at startup |
+| `TLS_KEY_FILE` | Required when serving the investigation API | Server private-key path, loaded at startup |
 
 ## Deployment Ownership
 

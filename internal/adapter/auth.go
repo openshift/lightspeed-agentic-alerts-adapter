@@ -7,11 +7,9 @@ import (
 	"net/url"
 
 	agenticv1alpha1 "github.com/openshift/lightspeed-agentic-operator/api/v1alpha1"
-	authenticationv1 "k8s.io/api/authentication/v1"
 	authorizationv1 "k8s.io/api/authorization/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	authenticationclient "k8s.io/client-go/kubernetes/typed/authentication/v1"
 	authorizationclient "k8s.io/client-go/kubernetes/typed/authorization/v1"
 	"k8s.io/client-go/rest"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -31,7 +29,6 @@ type AgenticRunRequest interface {
 
 // AgenticRunInvestigationRequest keeps ServiceAccount and caller operations separate.
 type AgenticRunInvestigationRequest struct {
-	reviews                  authenticationclient.TokenReviewInterface
 	selfSubjectAccessReviews func(*rest.Config) (authorizationclient.SelfSubjectAccessReviewInterface, error)
 	anonymous                *rest.Config
 	shared                   client.Client
@@ -46,12 +43,7 @@ func NewAgenticRunInvestigationRequest(
 	if err := validateKubernetesEndpoint(cfg); err != nil {
 		return nil, err
 	}
-	auth, err := authenticationclient.NewForConfig(cfg)
-	if err != nil {
-		return nil, errInternal
-	}
 	return &AgenticRunInvestigationRequest{
-		reviews:                  auth.TokenReviews(),
 		selfSubjectAccessReviews: newSelfSubjectAccessReviews,
 		anonymous:                rest.AnonymousClientConfig(cfg),
 		shared:                   shared,
@@ -100,22 +92,13 @@ func (a *AgenticRunInvestigationRequest) Authorize(
 	if token == "" {
 		return nil, errInvestigationUnauthorized
 	}
-	review, err := a.reviews.Create(ctx, &authenticationv1.TokenReview{
-		Spec: authenticationv1.TokenReviewSpec{Token: token},
-	}, metav1.CreateOptions{})
-	if err != nil {
-		return nil, internalError(ctx, a.logger, "token_review", err)
-	}
-	if !review.Status.Authenticated {
-		return nil, errInvestigationUnauthorized
-	}
-	if review.Status.Error != "" {
-		return nil, internalError(ctx, a.logger, "token_review_response", errors.New("authenticated with review error"))
-	}
 	if err := ctx.Err(); err != nil {
 		return nil, internalError(ctx, a.logger, "prepare_caller_client", err)
 	}
 
+	// The Kubernetes API server authenticates the caller's bearer token
+	// directly on the SelfSubjectAccessReview request; a separate TokenReview
+	// would only add a kube-apiserver round-trip per request.
 	// Never retain request credentials in the shared config or client.
 	callerConfig := rest.CopyConfig(a.anonymous)
 	callerConfig.BearerToken = token
