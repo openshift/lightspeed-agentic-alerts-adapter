@@ -3,8 +3,11 @@ package framework
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"time"
+
+	"github.com/prometheus/alertmanager/api/v2/models"
 )
 
 const (
@@ -100,6 +103,53 @@ func ResolveAlert(ctx context.Context, labels map[string]string) error {
 	}
 
 	return nil
+}
+
+// FindAlertViaExec queries AlertManager directly inside the pod using oc exec,
+// bypassing the OAuth-protected route. Returns the first active alert matching
+// all supplied labels.
+func FindAlertViaExec(ctx context.Context, labels map[string]string) (*models.GettableAlert, error) {
+	if len(labels) == 0 {
+		return nil, errors.New("test alert labels must not be empty")
+	}
+	pods, err := getAlertManagerPods(ctx)
+	if err != nil {
+		return nil, err
+	}
+	url := alertmanagerAPIURL + "?active=true&silenced=false&inhibited=false"
+	out, err := Run(ctx, "exec", pods[0], "-n", alertmanagerNamespace, "-c", "alertmanager", "--",
+		"curl", "-s", url, "--max-time", "10", "--connect-timeout", "5")
+	if err != nil {
+		return nil, fmt.Errorf("querying alerts via exec: %w", err)
+	}
+	var alerts models.GettableAlerts
+	if err := json.Unmarshal([]byte(out), &alerts); err != nil {
+		return nil, fmt.Errorf("decoding alerts response: %w", err)
+	}
+	var matched *models.GettableAlert
+	for _, alert := range alerts {
+		if alert == nil {
+			continue
+		}
+		matches := true
+		for name, value := range labels {
+			actual, present := alert.Labels[name]
+			if !present || actual != value {
+				matches = false
+				break
+			}
+		}
+		if !matches {
+			continue
+		}
+		if alert.Fingerprint == nil || *alert.Fingerprint == "" {
+			return nil, errors.New("matching test alert has no fingerprint")
+		}
+		if matched == nil || *alert.Fingerprint < *matched.Fingerprint {
+			matched = alert
+		}
+	}
+	return matched, nil
 }
 
 func getAlertManagerPods(ctx context.Context) ([]string, error) {

@@ -16,6 +16,7 @@ import (
 	"github.com/go-openapi/strfmt"
 	agenticv1alpha1 "github.com/openshift/lightspeed-agentic-operator/api/v1alpha1"
 	"github.com/prometheus/alertmanager/api/v2/models"
+	"github.com/stretchr/testify/assert"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/util/flowcontrol"
 	clocktesting "k8s.io/utils/clock/testing"
@@ -524,6 +525,9 @@ func TestReconcile(t *testing.T) {
 
 			if len(rc.created) != tt.wantCreated {
 				t.Errorf("created %d runs, want %d", len(rc.created), tt.wantCreated)
+			}
+			for _, run := range rc.created {
+				assert.Equal(t, "poller", run.Labels[triggerLabel])
 			}
 			if rc.createCalls != tt.wantCreateCalls {
 				t.Errorf("CreateAgenticRun called %d times, want %d", rc.createCalls, tt.wantCreateCalls)
