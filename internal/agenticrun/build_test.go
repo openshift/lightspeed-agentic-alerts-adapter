@@ -1022,3 +1022,39 @@ func TestBuildWithAgentOverrides(t *testing.T) {
 		})
 	}
 }
+
+// Vector verified against the live cluster: Alertmanager labels minus the
+// label the monitoring-plugin backend strips hash to the fingerprint the
+// console frontend sends (full 16 hex chars).
+func TestConsoleFingerprint(t *testing.T) {
+	cases := []struct {
+		labels map[string]string
+		want   string
+	}{
+		{
+			map[string]string{
+				"alertname":                 "AlertmanagerReceiversNotConfigured",
+				"namespace":                 "openshift-monitoring",
+				"openshift_io_alert_source": "platform",
+				"prometheus":                "openshift-monitoring/k8s",
+				"severity":                  "warning",
+			},
+			"36dc4a4e69cb6fd9",
+		},
+		{
+			map[string]string{
+				"alertname":                 "ClusterVersionOperatorDown",
+				"namespace":                 "openshift-cluster-version",
+				"openshift_io_alert_source": "platform",
+				"prometheus":                "openshift-monitoring/k8s",
+				"severity":                  "critical",
+			},
+			"d4764f9aeac309df",
+		},
+	}
+	for _, tc := range cases {
+		if got := ConsoleFingerprint(tc.labels); got != tc.want {
+			t.Fatalf("ConsoleFingerprint = %s, want %s", got, tc.want)
+		}
+	}
+}

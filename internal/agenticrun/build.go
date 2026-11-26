@@ -314,6 +314,37 @@ func truncateDNS(s string, maxLen int) string {
 	return s
 }
 
+// TransportLabels are labels the monitoring-plugin backend strips from
+// alerts before serving them to the console frontend (via the alert relabel
+// config), so they must be excluded when replicating its fingerprint.
+// shortcut: hardcoded from the default relabel config; revisit if the
+// backend's relabeling becomes configurable.
+var TransportLabels = []string{"openshift_io_alert_source"}
+
+// ConsoleFingerprint replicates the monitoring-console-plugin frontend
+// fingerprint (computeAlertFingerprint in web/src/shared/utils/alerts/):
+// Prometheus-style FNV-1a over the sorted label set (name + 0xff + value +
+// 0xff per label), excluding TransportLabels, as a 16-char hex string.
+func ConsoleFingerprint(labels map[string]string) string {
+	keys := make([]string, 0, len(labels))
+	for k := range labels {
+		if slices.Contains(TransportLabels, k) {
+			continue
+		}
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+
+	h := fnv.New64a()
+	for _, k := range keys {
+		h.Write([]byte(k))
+		h.Write([]byte{0xff})
+		h.Write([]byte(labels[k]))
+		h.Write([]byte{0xff})
+	}
+	return fmt.Sprintf("%016x", h.Sum64())
+}
+
 // StableFingerprint computes a stable hash from alert labels after removing
 // ignored labels. The remaining keys are sorted lexicographically, then each
 // key and value is length-prefixed before hashing with FNV-64a truncated to

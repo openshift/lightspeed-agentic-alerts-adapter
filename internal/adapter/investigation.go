@@ -61,8 +61,14 @@ func (service *InvestigationService) Investigate(
 	}
 	var matched *models.GettableAlert
 	for _, alert := range alerts {
-		if alert != nil && alert.Fingerprint != nil &&
-			*alert.Fingerprint == fingerprint {
+		if alert == nil {
+			continue
+		}
+		// The console frontend sends the Prometheus-view fingerprint (8 hex
+		// chars, labels without TransportLabels); the exact Alertmanager
+		// fingerprint (16 chars) is also accepted.
+		if (alert.Fingerprint != nil && *alert.Fingerprint == fingerprint) ||
+			agenticrun.ConsoleFingerprint(alert.Labels) == fingerprint {
 			matched = alert
 			break
 		}
