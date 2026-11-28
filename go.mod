@@ -10,7 +10,7 @@ require (
 	github.com/onsi/gomega v1.44.0
 	github.com/openshift/lightspeed-agentic-operator/api v0.0.0-20261113111246-2425e7c31102
 	github.com/openshift/lightspeed-hub v0.0.0-20260911154804-5f9c9000d10f
-	github.com/prometheus/alertmanager v0.35.0
+	github.com/prometheus/alertmanager v0.35.1
 	github.com/stretchr/testify v1.12.1
 	go.yaml.in/yaml/v4 v4.0.0
 	k8s.io/api v0.37.2
